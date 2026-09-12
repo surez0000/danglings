@@ -235,24 +235,49 @@ body,
   --line: rgba(241, 231, 208, 0.14);
   --serif: "Fraunces", ui-serif, Georgia, serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* Aurora glass (menu theme). The window is transparent, so the desktop
+     genuinely shows through the translucent panel. */
+  --glass-bg: rgba(10, 16, 28, 0.74);
+  --glass-tile: rgba(255, 255, 255, 0.045);
+  --glass-line: rgba(170, 215, 255, 0.14);
+  --glass-ink: #eaf6ff;
+  --glass-dim: #93a9c9;
+  --aurora-teal: #5ff5d4;
+  --aurora-blue: #4aa8ff;
+  --aurora-violet: #9d7bff;
+  --aurora-grad: linear-gradient(120deg, #5ff5d4, #4aa8ff 55%, #9d7bff);
+  --aurora-glow: rgba(93, 175, 255, 0.35);
 }
 
 .menu {
   position: absolute;
   width: 290px;
-  background: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  /* Aurora blobs live on the element background (default attachment pins them
+     to the panel, not the scrolling content). */
+  background:
+    radial-gradient(120% 90% at 85% -10%, rgba(157, 123, 255, 0.26), transparent 55%),
+    radial-gradient(100% 80% at -10% 12%, rgba(95, 245, 212, 0.18), transparent 50%),
+    radial-gradient(130% 110% at 50% 118%, rgba(74, 168, 255, 0.22), transparent 58%),
+    var(--glass-bg);
+  border: 1px solid var(--glass-line);
+  border-radius: 18px;
   padding: 16px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 2px 0 rgba(255, 255, 255, 0.03) inset;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 0 44px var(--aurora-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(93, 175, 255, 0.08);
+  backdrop-filter: blur(24px) saturate(1.35);
+  -webkit-backdrop-filter: blur(24px) saturate(1.35);
   font-family: var(--mono);
-  color: var(--parchment);
-  animation: menu-in 0.16s ease-out;
+  color: var(--glass-ink);
+  animation: menu-in 0.18s ease-out;
   /* One scroll context for the whole menu; max-height comes from App.tsx. */
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: rgba(210, 162, 76, 0.4) transparent;
+  scrollbar-color: rgba(95, 245, 212, 0.35) transparent;
 }
 
 .menu::-webkit-scrollbar {
@@ -260,7 +285,7 @@ body,
 }
 
 .menu::-webkit-scrollbar-thumb {
-  background: rgba(210, 162, 76, 0.35);
+  background: linear-gradient(rgba(95, 245, 212, 0.45), rgba(157, 123, 255, 0.45));
   border-radius: 6px;
 }
 
@@ -269,9 +294,9 @@ body,
   top: -7px;
   width: 14px;
   height: 14px;
-  background: var(--ink);
-  border-left: 1px solid var(--line);
-  border-top: 1px solid var(--line);
+  background: rgba(14, 21, 36, 0.92);
+  border-left: 1px solid var(--glass-line);
+  border-top: 1px solid var(--glass-line);
   transform: rotate(45deg);
   border-radius: 3px 0 0 0;
 }
@@ -279,20 +304,25 @@ body,
 @keyframes menu-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.97);
+    transform: translateY(-6px) scale(0.96);
+    filter: blur(4px);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+    filter: blur(0);
   }
 }
 
 .menu-label {
   margin: 0 0 10px;
   font-size: 0.65rem;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--parchment-dim);
+  background: var(--aurora-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* The menu itself scrolls, so the roster no longer nests a second scrollbar. */
@@ -310,25 +340,27 @@ body,
   align-items: center;
   gap: 5px;
   width: 100%;
-  background: var(--ink-2);
-  border: 1px solid rgba(241, 231, 208, 0.08);
-  border-radius: 12px;
+  background: var(--glass-tile);
+  border: 1px solid var(--glass-line);
+  border-radius: 14px;
   padding: 14px 12px 12px;
   cursor: pointer;
   text-align: center;
   font-family: var(--serif);
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .roster-card:hover {
-  background: rgba(210, 162, 76, 0.08);
-  border-color: rgba(210, 162, 76, 0.3);
+  background: rgba(120, 190, 255, 0.08);
+  border-color: rgba(95, 245, 212, 0.35);
+  box-shadow: 0 0 18px rgba(95, 245, 212, 0.12);
   transform: translateY(-1px);
 }
 
 .roster-card.active {
-  border-color: var(--gold);
-  background: rgba(210, 162, 76, 0.12);
+  border-color: rgba(109, 242, 216, 0.65);
+  background: rgba(95, 245, 212, 0.1);
+  box-shadow: 0 0 22px rgba(95, 245, 212, 0.18), inset 0 0 14px rgba(74, 168, 255, 0.08);
 }
 
 .roster-glyph {
@@ -342,15 +374,15 @@ body,
 .roster-cord {
   width: 1px;
   height: 12px;
-  background: linear-gradient(to bottom, transparent, rgba(210, 162, 76, 0.6));
+  background: linear-gradient(to bottom, transparent, rgba(95, 245, 212, 0.7));
 }
 
 .roster-bead {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--gold);
-  box-shadow: 0 0 3px rgba(210, 162, 76, 0.7);
+  background: var(--aurora-teal);
+  box-shadow: 0 0 5px rgba(95, 245, 212, 0.8);
 }
 
 .roster-emoji {
@@ -362,7 +394,7 @@ body,
 .roster-name {
   font-size: 0.92rem;
   font-weight: 600;
-  color: var(--parchment);
+  color: var(--glass-ink);
   letter-spacing: 0.01em;
 }
 
@@ -371,8 +403,8 @@ body,
   font-size: 0.56rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--parchment-dim);
-  border: 1px solid rgba(241, 231, 208, 0.18);
+  color: var(--glass-dim);
+  border: 1px solid var(--glass-line);
   border-radius: 999px;
   padding: 2px 9px;
 }
@@ -381,13 +413,13 @@ body,
   font-family: var(--mono);
   font-size: 0.66rem;
   line-height: 1.45;
-  color: var(--parchment-dim);
+  color: var(--glass-dim);
   padding: 0 2px;
 }
 
 .roster-card.active .roster-desc,
 .roster-card.active .roster-name {
-  color: var(--parchment);
+  color: var(--glass-ink);
 }
 
 .roster-action {
@@ -395,26 +427,24 @@ body,
   font-family: var(--mono);
   font-size: 0.65rem;
   font-weight: 600;
-  color: var(--gold);
-  border: 1px solid rgba(210, 162, 76, 0.5);
+  color: var(--aurora-teal);
+  border: 1px solid rgba(95, 245, 212, 0.45);
   border-radius: 999px;
   padding: 5px 14px;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.roster-card:hover .roster-action {
-  background: var(--gold);
-  color: #1c1712;
-}
-
+.roster-card:hover .roster-action,
 .roster-card.active .roster-action {
-  background: var(--gold);
-  color: #1c1712;
+  background: var(--aurora-grad);
+  border-color: transparent;
+  color: #061020;
+  box-shadow: 0 0 16px rgba(95, 245, 212, 0.35);
 }
 
 .menu-divider {
   height: 1px;
-  background: var(--line);
+  background: linear-gradient(90deg, transparent, rgba(95, 245, 212, 0.35), rgba(157, 123, 255, 0.35), transparent);
   margin: 14px 0 12px;
 }
 
@@ -426,10 +456,10 @@ body,
 .menu-custom input {
   flex: 1;
   min-width: 0;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--ink-2);
-  color: var(--parchment);
+  border-radius: 10px;
+  border: 1px solid var(--glass-line);
+  background: rgba(8, 14, 26, 0.6);
+  color: var(--glass-ink);
   padding: 7px 10px;
   font-size: 15px;
   font-family: inherit;
@@ -437,23 +467,25 @@ body,
 
 .menu-custom input:focus {
   outline: none;
-  border-color: var(--gold);
+  border-color: rgba(95, 245, 212, 0.6);
+  box-shadow: 0 0 12px rgba(95, 245, 212, 0.2);
 }
 
 .menu-set {
-  border-radius: 8px;
+  border-radius: 10px;
   border: none;
-  background: var(--gold);
-  color: #1c1712;
+  background: var(--aurora-grad);
+  color: #061020;
   font-weight: 600;
   font-size: 0.72rem;
   padding: 0 14px;
   cursor: pointer;
-  transition: filter 0.15s ease;
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
 }
 
 .menu-set:hover {
-  filter: brightness(1.1);
+  filter: brightness(1.12);
+  box-shadow: 0 0 16px rgba(95, 245, 212, 0.35);
 }
 
 .menu-settings {
@@ -475,7 +507,7 @@ body,
 
 .setting-name {
   font-size: 0.68rem;
-  color: var(--parchment);
+  color: var(--glass-ink);
 }
 
 .size-options {
@@ -486,25 +518,26 @@ body,
 .size-btn {
   width: 28px;
   height: 24px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--ink-2);
-  color: var(--parchment-dim);
+  border-radius: 7px;
+  border: 1px solid var(--glass-line);
+  background: var(--glass-tile);
+  color: var(--glass-dim);
   font-family: var(--mono);
   font-size: 0.68rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .size-btn:hover {
-  border-color: rgba(210, 162, 76, 0.4);
+  border-color: rgba(95, 245, 212, 0.4);
 }
 
 .size-btn.active {
-  background: var(--gold);
-  border-color: var(--gold);
-  color: #1c1712;
+  background: var(--aurora-grad);
+  border-color: transparent;
+  color: #061020;
+  box-shadow: 0 0 12px rgba(95, 245, 212, 0.3);
 }
 
 .toggle {
@@ -512,55 +545,59 @@ body,
   height: 20px;
   padding: 2px;
   border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--ink-2);
+  border: 1px solid var(--glass-line);
+  background: var(--glass-tile);
   cursor: pointer;
   display: flex;
   align-items: center;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .toggle-knob {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--parchment-dim);
+  background: var(--glass-dim);
   transition: transform 0.15s ease, background 0.15s ease;
 }
 
 .toggle.on {
-  background: rgba(210, 162, 76, 0.25);
-  border-color: var(--gold);
+  background: rgba(95, 245, 212, 0.18);
+  border-color: rgba(95, 245, 212, 0.55);
+  box-shadow: 0 0 12px rgba(95, 245, 212, 0.2);
 }
 
 .toggle.on .toggle-knob {
   transform: translateX(16px);
-  background: var(--gold);
+  background: var(--aurora-teal);
+  box-shadow: 0 0 8px rgba(95, 245, 212, 0.7);
 }
 
 .setting-row input[type="range"] {
   flex: 1;
   max-width: 130px;
-  accent-color: var(--gold);
+  accent-color: var(--aurora-teal);
 }
 
 .menu-move {
   width: 100%;
-  border-radius: 8px;
-  border: 1px solid rgba(210, 162, 76, 0.5);
+  border-radius: 10px;
+  border: 1px solid rgba(95, 245, 212, 0.45);
   background: transparent;
-  color: var(--gold);
+  color: var(--aurora-teal);
   font-family: var(--mono);
   font-size: 0.68rem;
   font-weight: 600;
   padding: 8px 10px;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .menu-move:hover {
-  background: var(--gold);
-  color: #1c1712;
+  background: var(--aurora-grad);
+  border-color: transparent;
+  color: #061020;
+  box-shadow: 0 0 16px rgba(95, 245, 212, 0.35);
 }
 
 .move-capture {
@@ -585,19 +622,20 @@ body,
   height: 10px;
   margin-top: 4px;
   border-radius: 50%;
-  background: var(--gold);
-  box-shadow: 0 0 8px rgba(210, 162, 76, 0.8);
+  background: var(--aurora-grad);
+  box-shadow: 0 0 10px rgba(95, 245, 212, 0.8);
 }
 
 .move-hint {
   font-family: var(--mono);
   font-size: 0.6rem;
-  color: var(--parchment);
-  background: rgba(23, 19, 14, 0.85);
-  border: 1px solid var(--line);
+  color: var(--glass-ink);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-line);
   border-radius: 999px;
   padding: 3px 10px;
   white-space: nowrap;
+  box-shadow: 0 0 14px rgba(93, 175, 255, 0.2);
 }
 
 /* ---- bird companion ---- */
@@ -655,25 +693,27 @@ body,
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  background: var(--ink-2);
-  border: 1px solid rgba(241, 231, 208, 0.08);
-  border-radius: 12px;
+  background: var(--glass-tile);
+  border: 1px solid var(--glass-line);
+  border-radius: 14px;
   padding: 12px 10px 10px;
   cursor: pointer;
   text-align: center;
   font-family: var(--serif);
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .companion-card:hover {
-  background: rgba(210, 162, 76, 0.08);
-  border-color: rgba(210, 162, 76, 0.3);
+  background: rgba(120, 190, 255, 0.08);
+  border-color: rgba(95, 245, 212, 0.35);
+  box-shadow: 0 0 18px rgba(95, 245, 212, 0.12);
   transform: translateY(-1px);
 }
 
 .companion-card.active {
-  border-color: var(--gold);
-  background: rgba(210, 162, 76, 0.12);
+  border-color: rgba(109, 242, 216, 0.65);
+  background: rgba(95, 245, 212, 0.1);
+  box-shadow: 0 0 22px rgba(95, 245, 212, 0.18), inset 0 0 14px rgba(74, 168, 255, 0.08);
 }
 
 .companion-thumb {
@@ -693,7 +733,7 @@ body,
 .companion-name {
   font-size: 0.8rem;
   font-weight: 600;
-  color: var(--parchment);
+  color: var(--glass-ink);
   letter-spacing: 0.01em;
 }
 
@@ -701,12 +741,12 @@ body,
   font-family: var(--mono);
   font-size: 0.58rem;
   line-height: 1.4;
-  color: var(--parchment-dim);
+  color: var(--glass-dim);
 }
 
 .companion-card.active .companion-name,
 .companion-card.active .companion-desc {
-  color: var(--parchment);
+  color: var(--glass-ink);
 }
 
 .companion-action {
@@ -714,15 +754,17 @@ body,
   font-family: var(--mono);
   font-size: 0.6rem;
   font-weight: 600;
-  color: var(--gold);
-  border: 1px solid rgba(210, 162, 76, 0.5);
+  color: var(--aurora-teal);
+  border: 1px solid rgba(95, 245, 212, 0.45);
   border-radius: 999px;
   padding: 3px 10px;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .companion-card:hover .companion-action,
 .companion-card.active .companion-action {
-  background: var(--gold);
-  color: #1c1712;
+  background: var(--aurora-grad);
+  border-color: transparent;
+  color: #061020;
+  box-shadow: 0 0 14px rgba(95, 245, 212, 0.3);
 }
