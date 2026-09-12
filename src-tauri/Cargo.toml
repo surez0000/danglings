@@ -32,7 +32,7 @@ core-graphics = "0.24"
 # Pinned to the minors tauri 2.11 already pulls (objc2 0.6.x, objc2-app-kit 0.3.x
 # via tao/wry/muda) so no duplicate objc2 lands in the dependency tree.
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSResponder", "NSScreen"] }
+objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSResponder"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
