@@ -329,14 +329,34 @@ export default function BirdCompanion(props: BirdCompanionProps) {
       const lean = Math.min(Math.max(seat.velX * 0.02, -0.18), 0.18);
       const sceneRoll =
         s.attach === "seat" ? result.pose.roll - tilt + lean : result.pose.roll + lean * 0.4;
-      scene.setPose({
-        yaw: Math.min(Math.max(result.pose.yaw, -d.yawClamp), d.yawClamp),
-        pitch: result.pose.pitch * d.pitchMul,
-        roll: sceneRoll,
-        offsetY: result.pose.offsetY * d.bobMul,
-        scaleX: result.pose.scaleX,
-        scaleY: result.pose.scaleY,
-      });
+      const clampedYaw = Math.min(Math.max(result.pose.yaw, -d.yawClamp), d.yawClamp);
+      const rigged = scene.hasRig();
+      // Rigged models track with the HEAD bone (fuller range) while the body
+      // only hints at the turn; unrigged models rotate whole-body as before.
+      scene.setPose(
+        {
+          yaw: rigged ? clampedYaw * 0.25 : clampedYaw,
+          pitch: (rigged ? 0.35 : 1) * result.pose.pitch * d.pitchMul,
+          roll: sceneRoll,
+          offsetY: result.pose.offsetY * d.bobMul,
+          scaleX: result.pose.scaleX,
+          scaleY: result.pose.scaleY,
+        },
+        rigged
+          ? {
+              headYaw: clampedYaw,
+              headPitch: Math.min(Math.max(result.pose.pitch * 2, -0.5), 0.55),
+              flapAngle:
+                result.flapAmp > 0
+                  ? result.flapAmp * 0.55 * Math.sin(2 * Math.PI * 13 * (now / 1000))
+                  : 0,
+              wagAngle:
+                result.tailWag > 0
+                  ? result.tailWag * 0.3 * Math.sin(2 * Math.PI * 3 * (now / 1000))
+                  : 0,
+            }
+          : undefined,
+      );
       scene.render();
       lastRenderTsRef.current = now;
     }

@@ -39,6 +39,11 @@ export type StepResult = {
   /* True while a flutter/peck/chirp animation is actually playing — drives the
      60fps render tier. Doze vignettes are slow and stay at 30fps. */
   oneShotActive: boolean;
+  /* Rig-mode extras (0 when idle): flap envelope 0..1 during flutter/chirp,
+     tail-wag envelope 0..1 during occasional idle/watch bursts. The caller
+     turns these into oscillating bone angles. */
+  flapAmp: number;
+  tailWag: number;
 };
 
 export type Behavior = {
@@ -56,6 +61,9 @@ export type Behavior = {
   // flutter hysteresis
   flutterCooldownUntil: number;
   flutterImpulseSign: number;
+  // tail-wag bursts (rigged models)
+  nextWagAt: number;
+  wagUntil: number;
   // saccade darts
   saccadeRefX: number;
   saccadeRefY: number;
@@ -121,6 +129,10 @@ const SACCADE_DIST_PX = 250;
 const SACCADE_WINDOW_MS = 120;
 const SACCADE_HOLD_MS = 150;
 
+const WAG_MS = 1200;
+const WAG_GAP_MIN_MS = 6000;
+const WAG_GAP_MAX_MS = 14000;
+
 const EPS_ROT = 0.001;
 const EPS_OFFSET = 0.0005;
 const EPS_SCALE = 0.001;
@@ -154,6 +166,8 @@ export function createBehavior(): Behavior {
     peckSfxRep: -1,
     flutterCooldownUntil: 0,
     flutterImpulseSign: 1,
+    nextWagAt: 0,
+    wagUntil: 0,
     saccadeRefX: 0,
     saccadeRefY: 0,
     saccadeRefAt: 0,
@@ -474,6 +488,23 @@ export function stepBehavior(b: Behavior, ctx: BehaviorCtx): StepResult {
     }
   }
 
+  // Rig extras: flap during flutter (chirp gets a small hop of the wings);
+  // occasional tail-wag bursts while idle/watching.
+  let flapAmp = 0;
+  if (b.state === "flutter" && elapsed <= FLUTTER_ANIM_MS) flapAmp = 1 - elapsed / FLUTTER_ANIM_MS;
+  else if (b.state === "chirp" && elapsed < 250) flapAmp = 0.35;
+  let tailWag = 0;
+  if (b.state === "idle" || b.state === "watch") {
+    if (b.nextWagAt === 0) b.nextWagAt = now + rand(WAG_GAP_MIN_MS, WAG_GAP_MAX_MS);
+    if (now >= b.nextWagAt && now >= b.wagUntil) {
+      b.wagUntil = now + WAG_MS;
+      b.nextWagAt = now + rand(WAG_GAP_MIN_MS, WAG_GAP_MAX_MS);
+    }
+    if (now < b.wagUntil) {
+      tailWag = Math.sin(Math.PI * (1 - (b.wagUntil - now) / WAG_MS));
+    }
+  }
+
   // Render gate: outside doze render when the pose meaningfully changed (the
   // epsilon check coalesces idle's slow bob); in doze only the settle ease,
   // vignettes and their final frames render — otherwise exactly 0fps.
@@ -482,12 +513,13 @@ export function stepBehavior(b: Behavior, ctx: BehaviorCtx): StepResult {
     (!b.dozeSettled || (b.vignetteUntil !== 0 && now < b.vignetteUntil) || b.finalFramePending);
   let wantsRender = false;
   if (b.state !== "doze" || dozeActive) {
-    wantsRender = b.finalFramePending || poseChanged(p, b.lastRenderPose);
+    wantsRender =
+      b.finalFramePending || flapAmp > 0.001 || tailWag > 0.001 || poseChanged(p, b.lastRenderPose);
     if (wantsRender) {
       b.finalFramePending = false;
       b.lastRenderPose = { ...p };
     }
   }
 
-  return { pose: p, wantsRender, sfx, seatImpulseX, oneShotActive };
+  return { pose: p, wantsRender, sfx, seatImpulseX, oneShotActive, flapAmp, tailWag };
 }

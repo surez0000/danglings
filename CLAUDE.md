@@ -40,6 +40,12 @@ that is click-through except near the charm. Tray menu + Shift+Alt+K toggle.
     look-at math, pose smoothing, doze vignettes.
   - `birdScene.ts` — three.js ortho scene + GLTF/meshopt/webp loader, context-loss recovery.
     The ONLY file that statically imports three; only ever loaded via dynamic import.
+    Rigged GLBs are auto-detected (Meshy bones are anonymous, so joints are found by
+    position in the normalized model: head = highest central, wings = lateral chain
+    roots, tail = rear-most central) and driven procedurally via RigPose — head-only
+    cursor tracking, wing flap, tail wag; unrigged models keep whole-body rotation.
+    Rigged asset pipeline: same optimize command, verify skins/joints survive
+    (bluebird.glb is rigged: 20 joints).
   - `BirdCompanion.tsx` — bird-mode owner: fixed-timestep physics accumulator, render tiers,
     sleep/wake gates, hit-point sends, drag/click/context-menu surfaces, glyph fallback.
   - `BirdGlyph.tsx` — flat-cute SVG bird: picker thumbnail, GLB-loading placeholder, and
