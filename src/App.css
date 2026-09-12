@@ -730,6 +730,33 @@ body,
   line-height: 1;
 }
 
+.variant-dots {
+  display: flex;
+  gap: 6px;
+  margin: 2px 0;
+}
+
+.variant-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.25);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.variant-dot:hover {
+  transform: scale(1.18);
+}
+
+.variant-dot.active {
+  box-shadow:
+    0 0 0 2px rgba(10, 16, 28, 0.9),
+    0 0 0 3.5px var(--aurora-teal),
+    0 0 10px rgba(95, 245, 212, 0.5);
+}
+
 .companion-name {
   font-size: 0.8rem;
   font-weight: 600;

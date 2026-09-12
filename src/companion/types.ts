@@ -1,8 +1,21 @@
 import type { CharmSize } from "../App";
 
-export type CompanionId = "bluebird" | "monkey" | "panda" | "chameleon" | "swinger";
+export type CompanionId = "bluebird" | "monkey" | "panda" | "chameleon" | "swinger" | "elephant" | "kitty";
 
-export type CompanionSelection = { kind: "charm" } | { kind: "companion"; id: CompanionId };
+export type CompanionSelection =
+  | { kind: "charm" }
+  | { kind: "companion"; id: CompanionId; variantId?: string };
+
+/* A color variant: same character, same rig-less geometry class, different
+   texture/model file. The picker shows one card per companion with a swatch
+   dot per variant. */
+export type CompanionVariant = {
+  id: string;
+  label: string;
+  /* CSS color for the picker dot. */
+  swatch: string;
+  modelUrl: string;
+};
 
 /* seat: sits on the physics swing (two cords + seat bar).
    hang: the model has its own rope/swing baked into the mesh and dangles from a
@@ -37,7 +50,16 @@ export type CompanionDef = {
   yawClamp: number;
   pitchMul: number;
   bobMul: number;
+  /* Color variants; the first one is the default. modelUrl above is the
+     fallback when variants is absent. */
+  variants?: CompanionVariant[];
 };
+
+export function companionModelUrl(def: CompanionDef, variantId?: string): string {
+  if (!def.variants || def.variants.length === 0) return def.modelUrl;
+  const v = def.variants.find((x) => x.id === variantId);
+  return (v ?? def.variants[0]).modelUrl;
+}
 
 /* Registry of shipped companions; packs later slice this by packId. */
 export const COMPANIONS: CompanionDef[] = [
@@ -78,6 +100,11 @@ export const COMPANIONS: CompanionDef[] = [
     yawClamp: 0.5,
     pitchMul: 0.8,
     bobMul: 0.7,
+    variants: [
+      { id: "classic", label: "Classic", swatch: "#7a4a3c", modelUrl: "/companions/monkey.glb" },
+      { id: "snowy", label: "Snowy", swatch: "#e8e2dc", modelUrl: "/companions/monkey-b.glb" },
+      { id: "cocoa", label: "Cocoa", swatch: "#4c3a34", modelUrl: "/companions/monkey-c.glb" },
+    ],
   },
   {
     id: "panda",
@@ -135,6 +162,50 @@ export const COMPANIONS: CompanionDef[] = [
     yawClamp: 0.5,
     pitchMul: 0.3,
     bobMul: 0.3,
+  },
+  {
+    id: "elephant",
+    name: "Baby Elephant",
+    description:
+      "A round little elephant that plants itself on the swing, ears out wide, watching everything you do.",
+    actionLabel: "Boop the trunk",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/elephant-a.glb",
+    wantsCursor: true,
+    emoji: "🐘",
+    attach: "seat",
+    aspect: 1.06,
+    heightPx: { small: 64, medium: 96, large: 128 },
+    focusFrac: 0.35,
+    yawClamp: 0.45,
+    pitchMul: 0.7,
+    bobMul: 0.8,
+    variants: [
+      { id: "grey", label: "Grey", swatch: "#9aa0a8", modelUrl: "/companions/elephant-a.glb" },
+      { id: "blue", label: "Blue", swatch: "#7d93b8", modelUrl: "/companions/elephant-b.glb" },
+      { id: "snow", label: "Snow", swatch: "#e9e6e7", modelUrl: "/companions/elephant-c.glb" },
+      { id: "pink", label: "Pink", swatch: "#d8a3b6", modelUrl: "/companions/elephant-d.glb" },
+    ],
+  },
+  {
+    id: "kitty",
+    name: "Snowflake Kitty",
+    description:
+      "A fluffy white kitten perched on the swing, tracking your cursor with those enormous eyes.",
+    actionLabel: "Pspsps",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/kitty.glb",
+    wantsCursor: true,
+    emoji: "🐱",
+    attach: "seat",
+    aspect: 0.91,
+    heightPx: { small: 64, medium: 96, large: 128 },
+    focusFrac: 0.3,
+    yawClamp: 0.55,
+    pitchMul: 0.8,
+    bobMul: 0.9,
   },
 ];
 

@@ -27,7 +27,10 @@ that is click-through except near the charm. Tray menu + Shift+Alt+K toggle.
     into the mesh and dangle from a short single cord via `attach: "hang"`), per-companion
     motion knobs (yawClamp/pitchMul/bobMul/focusFrac), `companionSpec(def, size)` deriving
     modelPx/canvas dims/rig lengths, and the loop/battery constants. Adding a companion =
-    one optimized GLB in public/companions/ + one registry entry.
+    one optimized GLB in public/companions/ + one registry entry. A companion may declare
+    `variants` (color variants: same character, different GLB — monkey ×3, elephant ×4);
+    the picker card shows a swatch dot per variant and the selection persists as
+    `{kind:'companion', id, variantId?}`.
   - `companionStore.ts` — load/save `danglings.companion`.
   - `useCursorFeed.ts` — module singleton `cursorState` fed by the Rust `cursor-moved` event;
     `startCursorFeed(onWake)` opts in via `set_cursor_stream`, disposer opts out.

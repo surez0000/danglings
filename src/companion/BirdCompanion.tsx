@@ -15,6 +15,7 @@ import {
   RENDER_INTERVAL_MS,
   SLEEP_FRAMES,
   WIND_WAKE_WINDOW_MS,
+  companionModelUrl,
   companionSpec,
   type CompanionId,
   type CompanionSizeSpec,
@@ -32,6 +33,7 @@ export type BirdCompanionProps = {
   anchorX: number;
   anchorY: number;
   companionId: CompanionId;
+  variantId?: string;
   size: CharmSize;
   /* True while the picker menu is open: physics and behavior freeze so nobody
      has to click a card anchored to a moving target. */
@@ -77,7 +79,7 @@ function headOffsetY(spec: CompanionSizeSpec): number {
 }
 
 export default function BirdCompanion(props: BirdCompanionProps) {
-  const { stage, size, companionId } = props;
+  const { stage, size, companionId, variantId } = props;
   const def = COMPANION_BY_ID[companionId];
   const spec = companionSpec(def, size);
 
@@ -443,7 +445,7 @@ export default function BirdCompanion(props: BirdCompanionProps) {
         const d = COMPANION_BY_ID[propsRef.current.companionId];
         const sp = companionSpec(d, propsRef.current.size);
         const scene = await createBirdScene(canvas, {
-          url: d.modelUrl,
+          url: companionModelUrl(d, propsRef.current.variantId),
           attach: sp.attach,
           canvasW: sp.canvasW,
           canvasH: sp.canvasH,
@@ -466,7 +468,7 @@ export default function BirdCompanion(props: BirdCompanionProps) {
       sceneRef.current?.dispose();
       sceneRef.current = null;
     };
-  }, [companionId]);
+  }, [companionId, variantId]);
 
   // Cursor feed: Rust pushes dead-banded 30Hz events; each one wakes the LOOP
   // (the gaze must track) but deliberately not the wind window and not the

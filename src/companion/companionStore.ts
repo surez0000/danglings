@@ -11,7 +11,13 @@ export function loadCompanion(): CompanionSelection {
         // Legacy shape from the bird-only build.
         if (kind === "bird") return { kind: "companion", id: "bluebird" };
         if (kind === "companion" && typeof id === "string" && id in COMPANION_BY_ID) {
-          return { kind: "companion", id: id as CompanionId };
+          const def = COMPANION_BY_ID[id as CompanionId];
+          const variantId = (parsed as { variantId?: unknown }).variantId;
+          const valid =
+            typeof variantId === "string" && def.variants?.some((v) => v.id === variantId)
+              ? variantId
+              : undefined;
+          return { kind: "companion", id: id as CompanionId, variantId: valid };
         }
         if (kind === "charm") return { kind: "charm" };
       }

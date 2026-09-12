@@ -391,6 +391,7 @@ export default function App() {
             anchorX={anchorX}
             anchorY={ANCHOR_Y}
             companionId={companion.id}
+            variantId={companion.variantId}
             size={settings.size}
             paused={menuOpen}
             windEnabled={settings.windEnabled}
@@ -438,20 +439,47 @@ export default function App() {
               <span className="companion-desc">Your lucky charm on its thread, right where you left it.</span>
               <span className="companion-action">Hang it up</span>
             </button>
-            {COMPANIONS.map((c) => (
-              <button
-                key={c.id}
-                className={`companion-card ${companion.kind === "companion" && companion.id === c.id ? "active" : ""}`}
-                onClick={() => chooseCompanion({ kind: "companion", id: c.id })}
-              >
-                <span className="companion-thumb">
-                  {c.id === "bluebird" ? <BirdGlyph size={30} /> : <span className="companion-emoji">{c.emoji}</span>}
-                </span>
-                <span className="companion-name">{c.name}</span>
-                <span className="companion-desc">{c.description}</span>
-                <span className="companion-action">{c.actionLabel}</span>
-              </button>
-            ))}
+            {COMPANIONS.map((c) => {
+              const isActive = companion.kind === "companion" && companion.id === c.id;
+              const activeVariant =
+                companion.kind === "companion" && companion.id === c.id
+                  ? (companion.variantId ?? c.variants?.[0]?.id)
+                  : undefined;
+              return (
+                <button
+                  key={c.id}
+                  className={`companion-card ${isActive ? "active" : ""}`}
+                  onClick={() =>
+                    // Re-clicking the active card keeps its chosen color.
+                    chooseCompanion({ kind: "companion", id: c.id, variantId: activeVariant })
+                  }
+                >
+                  <span className="companion-thumb">
+                    {c.id === "bluebird" ? <BirdGlyph size={30} /> : <span className="companion-emoji">{c.emoji}</span>}
+                  </span>
+                  <span className="companion-name">{c.name}</span>
+                  {c.variants && (
+                    <span className="variant-dots">
+                      {c.variants.map((v) => (
+                        <span
+                          key={v.id}
+                          role="button"
+                          title={v.label}
+                          className={`variant-dot ${isActive && activeVariant === v.id ? "active" : ""}`}
+                          style={{ background: v.swatch }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            chooseCompanion({ kind: "companion", id: c.id, variantId: v.id });
+                          }}
+                        />
+                      ))}
+                    </span>
+                  )}
+                  <span className="companion-desc">{c.description}</span>
+                  <span className="companion-action">{c.actionLabel}</span>
+                </button>
+              );
+            })}
           </div>
           <div className="menu-divider" />
           <p className="menu-label">choose a charm</p>
