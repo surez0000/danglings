@@ -99,13 +99,17 @@ export default function App() {
   }, [menuOpen, moving]);
 
   useEffect(() => {
-    invoke<[number, number]>("get_stage_size").then(([w, h]) => {
-      const x = Math.min(Math.max(settingsRef.current.anchorRatio * w, MARGIN), w - MARGIN);
-      anchorXRef.current = x;
-      setAnchorX(x);
-      pointsRef.current = createRope(x, ANCHOR_Y);
-      setStage({ width: w, height: h });
-    });
+    invoke<[number, number]>("get_stage_size")
+      // Plain-browser fallback (vite without Tauri) so the app is debuggable
+      // in a normal browser; the real overlay always resolves the invoke.
+      .catch(() => [window.innerWidth, window.innerHeight] as [number, number])
+      .then(([w, h]) => {
+        const x = Math.min(Math.max(settingsRef.current.anchorRatio * w, MARGIN), w - MARGIN);
+        anchorXRef.current = x;
+        setAnchorX(x);
+        pointsRef.current = createRope(x, ANCHOR_Y);
+        setStage({ width: w, height: h });
+      });
   }, []);
 
   useEffect(() => {

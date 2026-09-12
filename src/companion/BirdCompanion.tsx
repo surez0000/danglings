@@ -432,29 +432,34 @@ export default function BirdCompanion(props: BirdCompanionProps) {
     if (!props.paused) ensureLoop();
   }, [props.anchorX, stage.width, stage.height, props.windEnabled, props.windIntensity, props.paused]);
 
-  // Lazy-load the three.js chunk; the glyph placeholder swings meanwhile, and
-  // stays permanently if WebGL/GLB fail. Re-runs when the companion changes.
+  // The GL world (renderer + environment + lights) is created ONCE and only
+  // the model is swapped on companion/variant changes — a full scene rebuild
+  // stalls the main thread ~1s, and with the picker holding the whole overlay
+  // window interactive, that stall swallowed every click on the screen. The
+  // previous model stays visible until the new one is ready; configure() is
+  // latest-wins, so rapid dot-clicking never queues rebuilds.
+  const scenePromiseRef = useRef<Promise<BirdScene> | null>(null);
   useEffect(() => {
     let cancelled = false;
-    setSceneStatus("loading");
     (async () => {
       try {
-        const { createBirdScene } = await import("./birdScene");
-        const canvas = canvasRef.current;
-        if (!canvas || cancelled) return;
+        if (!scenePromiseRef.current) {
+          scenePromiseRef.current = import("./birdScene").then((m) =>
+            m.createBirdScene(canvasRef.current!),
+          );
+        }
+        const scene = await scenePromiseRef.current;
+        if (cancelled) return;
         const d = COMPANION_BY_ID[propsRef.current.companionId];
         const sp = companionSpec(d, propsRef.current.size);
-        const scene = await createBirdScene(canvas, {
+        await scene.configure({
           url: companionModelUrl(d, propsRef.current.variantId),
           attach: sp.attach,
           canvasW: sp.canvasW,
           canvasH: sp.canvasH,
           modelPx: sp.modelPx,
         });
-        if (cancelled) {
-          scene.dispose();
-          return;
-        }
+        if (cancelled) return;
         sceneRef.current = scene;
         setSceneStatus("ready");
         lastRenderTsRef.current = 0;
@@ -465,10 +470,19 @@ export default function BirdCompanion(props: BirdCompanionProps) {
     })();
     return () => {
       cancelled = true;
-      sceneRef.current?.dispose();
-      sceneRef.current = null;
     };
   }, [companionId, variantId]);
+
+  // Unmount: tear the GL world down and clear the ref — StrictMode's dev
+  // double-mount would otherwise reconfigure a disposed scene on remount.
+  useEffect(() => {
+    return () => {
+      sceneRef.current = null;
+      const p = scenePromiseRef.current;
+      scenePromiseRef.current = null;
+      p?.then((s) => s.dispose()).catch(() => {});
+    };
+  }, []);
 
   // Cursor feed: Rust pushes dead-banded 30Hz events; each one wakes the LOOP
   // (the gaze must track) but deliberately not the wind window and not the
