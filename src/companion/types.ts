@@ -6,28 +6,16 @@ export type CompanionSelection =
   | { kind: "charm" }
   | { kind: "companion"; id: CompanionId; variantId?: string };
 
-/* A skin: the three texture maps extracted from a same-geometry variant GLB
-   (scripts/extract-skin.mjs). ~90KB instead of re-shipping the ~270KB mesh. */
-export type SkinUrls = { base: string; normal: string; mr: string };
-
-/* A color variant: same character and geometry, different texture set. The
-   picker shows one card per companion with a swatch dot per variant. A variant
-   without `skin` uses the textures baked into the family's model file. */
+/* A color variant: same character, same rig-less geometry class, different
+   texture/model file. The picker shows one card per companion with a swatch
+   dot per variant. */
 export type CompanionVariant = {
   id: string;
   label: string;
   /* CSS color for the picker dot. */
   swatch: string;
-  skin?: SkinUrls;
+  modelUrl: string;
 };
-
-function skin(prefix: string): SkinUrls {
-  return {
-    base: `/companions/skins/${prefix}.base.webp`,
-    normal: `/companions/skins/${prefix}.normal.webp`,
-    mr: `/companions/skins/${prefix}.mr.webp`,
-  };
-}
 
 /* seat: sits on the physics swing (two cords + seat bar).
    hang: the model has its own rope/swing baked into the mesh and dangles from a
@@ -67,12 +55,10 @@ export type CompanionDef = {
   variants?: CompanionVariant[];
 };
 
-/* Geometry always comes from the family's single model file; a variant only
-   contributes its texture set. */
-export function companionSkin(def: CompanionDef, variantId?: string): SkinUrls | undefined {
-  if (!def.variants || def.variants.length === 0) return undefined;
+export function companionModelUrl(def: CompanionDef, variantId?: string): string {
+  if (!def.variants || def.variants.length === 0) return def.modelUrl;
   const v = def.variants.find((x) => x.id === variantId);
-  return (v ?? def.variants[0]).skin;
+  return (v ?? def.variants[0]).modelUrl;
 }
 
 /* Registry of shipped companions; packs later slice this by packId. */
@@ -115,9 +101,9 @@ export const COMPANIONS: CompanionDef[] = [
     pitchMul: 0.8,
     bobMul: 0.7,
     variants: [
-      { id: "classic", label: "Classic", swatch: "#7a4a3c" },
-      { id: "snowy", label: "Snowy", swatch: "#e8e2dc", skin: skin("monkey-snowy") },
-      { id: "cocoa", label: "Cocoa", swatch: "#4c3a34", skin: skin("monkey-cocoa") },
+      { id: "classic", label: "Classic", swatch: "#7a4a3c", modelUrl: "/companions/monkey.glb" },
+      { id: "snowy", label: "Snowy", swatch: "#e8e2dc", modelUrl: "/companions/monkey-b.glb" },
+      { id: "cocoa", label: "Cocoa", swatch: "#4c3a34", modelUrl: "/companions/monkey-c.glb" },
     ],
   },
   {
@@ -196,10 +182,10 @@ export const COMPANIONS: CompanionDef[] = [
     pitchMul: 0.7,
     bobMul: 0.8,
     variants: [
-      { id: "grey", label: "Grey", swatch: "#9aa0a8" },
-      { id: "blue", label: "Blue", swatch: "#7d93b8", skin: skin("elephant-blue") },
-      { id: "snow", label: "Snow", swatch: "#e9e6e7", skin: skin("elephant-snow") },
-      { id: "pink", label: "Pink", swatch: "#d8a3b6", skin: skin("elephant-pink") },
+      { id: "grey", label: "Grey", swatch: "#9aa0a8", modelUrl: "/companions/elephant-a.glb" },
+      { id: "blue", label: "Blue", swatch: "#7d93b8", modelUrl: "/companions/elephant-b.glb" },
+      { id: "snow", label: "Snow", swatch: "#e9e6e7", modelUrl: "/companions/elephant-c.glb" },
+      { id: "pink", label: "Pink", swatch: "#d8a3b6", modelUrl: "/companions/elephant-d.glb" },
     ],
   },
   {

@@ -15,7 +15,7 @@ import {
   RENDER_INTERVAL_MS,
   SLEEP_FRAMES,
   WIND_WAKE_WINDOW_MS,
-  companionSkin,
+  companionModelUrl,
   companionSpec,
   type CompanionId,
   type CompanionSizeSpec,
@@ -479,8 +479,7 @@ export default function BirdCompanion(props: BirdCompanionProps) {
         const d = COMPANION_BY_ID[propsRef.current.companionId];
         const sp = companionSpec(d, propsRef.current.size);
         await scene.configure({
-          url: d.modelUrl,
-          skin: companionSkin(d, propsRef.current.variantId),
+          url: companionModelUrl(d, propsRef.current.variantId),
           attach: sp.attach,
           canvasW: sp.canvasW,
           canvasH: sp.canvasH,
