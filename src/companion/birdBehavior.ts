@@ -106,7 +106,6 @@ const FLUTTER_APPROACH_PX_S = 250;
 const FLUTTER_ANIM_MS = 700;
 const FLUTTER_MIN_MS = 600;
 const FLUTTER_COOLDOWN_MS = 3000;
-const FLUTTER_HZ = 14;
 const FLUTTER_IMPULSE = 1.5;
 
 const PECK_GAP_MIN_MS = 8000;
@@ -352,11 +351,12 @@ export function stepBehavior(b: Behavior, ctx: BehaviorCtx): StepResult {
       if (elapsed <= FLUTTER_ANIM_MS) {
         oneShotActive = true;
         const u = elapsed / FLUTTER_ANIM_MS;
-        const decay = 1 - u;
-        const buzz = Math.sin(2 * Math.PI * FLUTTER_HZ * (elapsed / 1000));
-        p.scaleX = 1 + 0.04 * buzz * decay;
+        // The startle reads as ONE smooth hop with a soft puff — the old 14Hz
+        // whole-body jitter looked like a glitch when the cursor came close.
+        // Rigged models express the buzz with their wings (flapAmp) instead.
+        p.scaleX = 1 + 0.06 * Math.sin(Math.PI * Math.min(u * 1.6, 1));
         p.scaleY = 1;
-        p.offsetY = 0.03 * buzz * decay + 0.08 * Math.sin(Math.PI * Math.min(u * 2.8, 1));
+        p.offsetY = 0.08 * Math.sin(Math.PI * Math.min(u * 2.8, 1));
       } else {
         p.scaleX = smooth(p.scaleX, 1, dt, TAU_RELAX);
         p.scaleY = smooth(p.scaleY, 1, dt, TAU_RELAX);

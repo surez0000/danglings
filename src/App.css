@@ -236,18 +236,20 @@ body,
   --serif: "Fraunces", ui-serif, Georgia, serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
-  /* Aurora glass (menu theme). The window is transparent, so the desktop
-     genuinely shows through the translucent panel. */
-  --glass-bg: rgba(10, 16, 28, 0.74);
-  --glass-tile: rgba(255, 255, 255, 0.045);
-  --glass-line: rgba(170, 215, 255, 0.14);
-  --glass-ink: #eaf6ff;
-  --glass-dim: #93a9c9;
-  --aurora-teal: #5ff5d4;
-  --aurora-blue: #4aa8ff;
-  --aurora-violet: #9d7bff;
-  --aurora-grad: linear-gradient(120deg, #5ff5d4, #4aa8ff 55%, #9d7bff);
-  --aurora-glow: rgba(93, 175, 255, 0.35);
+  /* LIGHT aurora glass (menu theme) — deliberately light-only for now, even
+     when the system is in dark mode (dark UI parked until it's designed). The
+     window is transparent, so the desktop shows through the translucent panel. */
+  color-scheme: light;
+  --glass-bg: rgba(247, 251, 255, 0.88);
+  --glass-tile: rgba(255, 255, 255, 0.65);
+  --glass-line: rgba(45, 90, 160, 0.18);
+  --glass-ink: #1c2b47;
+  --glass-dim: #5d6f8e;
+  --aurora-teal: #12b895;
+  --aurora-blue: #3f8fef;
+  --aurora-violet: #8a63f0;
+  --aurora-grad: linear-gradient(120deg, #2dd9b8, #4a9df5 55%, #9d7bff);
+  --aurora-glow: rgba(100, 165, 255, 0.28);
 }
 
 .menu {
@@ -256,18 +258,18 @@ body,
   /* Aurora blobs live on the element background (default attachment pins them
      to the panel, not the scrolling content). */
   background:
-    radial-gradient(120% 90% at 85% -10%, rgba(157, 123, 255, 0.26), transparent 55%),
-    radial-gradient(100% 80% at -10% 12%, rgba(95, 245, 212, 0.18), transparent 50%),
-    radial-gradient(130% 110% at 50% 118%, rgba(74, 168, 255, 0.22), transparent 58%),
+    radial-gradient(120% 90% at 85% -10%, rgba(138, 99, 240, 0.16), transparent 55%),
+    radial-gradient(100% 80% at -10% 12%, rgba(45, 217, 184, 0.14), transparent 50%),
+    radial-gradient(130% 110% at 50% 118%, rgba(74, 157, 245, 0.16), transparent 58%),
     var(--glass-bg);
   border: 1px solid var(--glass-line);
   border-radius: 18px;
   padding: 16px;
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.55),
-    0 0 44px var(--aurora-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(93, 175, 255, 0.08);
+    0 24px 55px rgba(25, 50, 100, 0.28),
+    0 0 40px var(--aurora-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(120, 170, 255, 0.15);
   backdrop-filter: blur(24px) saturate(1.35);
   -webkit-backdrop-filter: blur(24px) saturate(1.35);
   font-family: var(--mono);
@@ -294,7 +296,7 @@ body,
   top: -7px;
   width: 14px;
   height: 14px;
-  background: rgba(14, 21, 36, 0.92);
+  background: rgba(249, 252, 255, 0.95);
   border-left: 1px solid var(--glass-line);
   border-top: 1px solid var(--glass-line);
   transform: rotate(45deg);
@@ -325,121 +327,55 @@ body,
   color: transparent;
 }
 
-/* The menu itself scrolls, so the roster no longer nests a second scrollbar. */
-.roster {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0 -4px;
-  padding: 2px 4px 2px 2px;
+/* Animal-emoji charm grid: compact cells of emoji + original emoji name. */
+.charm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
 }
 
-.roster-card {
+.charm-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  width: 100%;
+  gap: 3px;
+  padding: 8px 4px 6px;
   background: var(--glass-tile);
   border: 1px solid var(--glass-line);
-  border-radius: 14px;
-  padding: 14px 12px 12px;
+  border-radius: 10px;
   cursor: pointer;
-  text-align: center;
-  font-family: var(--serif);
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.roster-card:hover {
-  background: rgba(120, 190, 255, 0.08);
-  border-color: rgba(95, 245, 212, 0.35);
-  box-shadow: 0 0 18px rgba(95, 245, 212, 0.12);
+.charm-cell:hover {
+  background: rgba(80, 150, 240, 0.1);
+  border-color: rgba(18, 184, 149, 0.45);
+  box-shadow: 0 0 14px rgba(45, 217, 184, 0.2);
   transform: translateY(-1px);
 }
 
-.roster-card.active {
-  border-color: rgba(109, 242, 216, 0.65);
-  background: rgba(95, 245, 212, 0.1);
-  box-shadow: 0 0 22px rgba(95, 245, 212, 0.18), inset 0 0 14px rgba(74, 168, 255, 0.08);
+.charm-cell.active {
+  border-color: rgba(18, 184, 149, 0.7);
+  background: rgba(18, 184, 149, 0.12);
+  box-shadow: 0 0 16px rgba(18, 184, 149, 0.25);
 }
 
-.roster-glyph {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  margin-bottom: 2px;
-}
-
-.roster-cord {
-  width: 1px;
-  height: 12px;
-  background: linear-gradient(to bottom, transparent, rgba(95, 245, 212, 0.7));
-}
-
-.roster-bead {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--aurora-teal);
-  box-shadow: 0 0 5px rgba(95, 245, 212, 0.8);
-}
-
-.roster-emoji {
-  font-size: 32px;
+.charm-cell-emoji {
+  font-size: 24px;
   line-height: 1.15;
-  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 2px 4px rgba(20, 40, 80, 0.25));
 }
 
-.roster-name {
-  font-size: 0.92rem;
-  font-weight: 600;
-  color: var(--glass-ink);
-  letter-spacing: 0.01em;
-}
-
-.roster-tag {
+.charm-cell-name {
   font-family: var(--mono);
-  font-size: 0.56rem;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-size: 0.52rem;
+  line-height: 1.2;
+  text-align: center;
   color: var(--glass-dim);
-  border: 1px solid var(--glass-line);
-  border-radius: 999px;
-  padding: 2px 9px;
 }
 
-.roster-desc {
-  font-family: var(--mono);
-  font-size: 0.66rem;
-  line-height: 1.45;
-  color: var(--glass-dim);
-  padding: 0 2px;
-}
-
-.roster-card.active .roster-desc,
-.roster-card.active .roster-name {
+.charm-cell.active .charm-cell-name {
   color: var(--glass-ink);
-}
-
-.roster-action {
-  margin-top: 4px;
-  font-family: var(--mono);
-  font-size: 0.65rem;
-  font-weight: 600;
-  color: var(--aurora-teal);
-  border: 1px solid rgba(95, 245, 212, 0.45);
-  border-radius: 999px;
-  padding: 5px 14px;
-  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.roster-card:hover .roster-action,
-.roster-card.active .roster-action {
-  background: var(--aurora-grad);
-  border-color: transparent;
-  color: #061020;
-  box-shadow: 0 0 16px rgba(95, 245, 212, 0.35);
 }
 
 .menu-divider {
@@ -458,7 +394,7 @@ body,
   min-width: 0;
   border-radius: 10px;
   border: 1px solid var(--glass-line);
-  background: rgba(8, 14, 26, 0.6);
+  background: rgba(255, 255, 255, 0.8);
   color: var(--glass-ink);
   padding: 7px 10px;
   font-size: 15px;
@@ -467,8 +403,8 @@ body,
 
 .menu-custom input:focus {
   outline: none;
-  border-color: rgba(95, 245, 212, 0.6);
-  box-shadow: 0 0 12px rgba(95, 245, 212, 0.2);
+  border-color: rgba(18, 184, 149, 0.6);
+  box-shadow: 0 0 12px rgba(18, 184, 149, 0.22);
 }
 
 .menu-set {
@@ -704,16 +640,16 @@ body,
 }
 
 .companion-card:hover {
-  background: rgba(120, 190, 255, 0.08);
-  border-color: rgba(95, 245, 212, 0.35);
-  box-shadow: 0 0 18px rgba(95, 245, 212, 0.12);
+  background: rgba(80, 150, 240, 0.1);
+  border-color: rgba(18, 184, 149, 0.45);
+  box-shadow: 0 0 16px rgba(45, 217, 184, 0.2);
   transform: translateY(-1px);
 }
 
 .companion-card.active {
-  border-color: rgba(109, 242, 216, 0.65);
-  background: rgba(95, 245, 212, 0.1);
-  box-shadow: 0 0 22px rgba(95, 245, 212, 0.18), inset 0 0 14px rgba(74, 168, 255, 0.08);
+  border-color: rgba(18, 184, 149, 0.7);
+  background: rgba(18, 184, 149, 0.12);
+  box-shadow: 0 0 18px rgba(18, 184, 149, 0.25), inset 0 0 14px rgba(74, 157, 245, 0.08);
 }
 
 .companion-thumb {
@@ -722,7 +658,7 @@ body,
   justify-content: center;
   width: 34px;
   height: 34px;
-  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 3px 6px rgba(20, 40, 80, 0.25));
 }
 
 .companion-emoji {
@@ -740,9 +676,9 @@ body,
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(30, 60, 110, 0.3);
   cursor: pointer;
-  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 4px rgba(20, 40, 80, 0.2);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -752,9 +688,9 @@ body,
 
 .variant-dot.active {
   box-shadow:
-    0 0 0 2px rgba(10, 16, 28, 0.9),
+    0 0 0 2px rgba(255, 255, 255, 0.95),
     0 0 0 3.5px var(--aurora-teal),
-    0 0 10px rgba(95, 245, 212, 0.5);
+    0 0 10px rgba(18, 184, 149, 0.45);
 }
 
 .companion-name {

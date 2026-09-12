@@ -45,6 +45,14 @@ fn set_cursor_stream(state: tauri::State<SharedHitState>, active: bool) {
     s.cursor_stream = active;
 }
 
+// The overlay is a borderless accessory panel and never becomes the key window
+// on its own — without this, typing into the custom-emoji field lands in
+// whatever app is behind the overlay.
+#[tauri::command]
+fn focus_window(window: WebviewWindow) {
+    let _ = window.set_focus();
+}
+
 #[tauri::command]
 fn get_stage_size(window: WebviewWindow) -> (f64, f64) {
     if let Ok(Some(monitor)) = window.current_monitor() {
@@ -252,6 +260,7 @@ pub fn run() {
             update_hit_points,
             set_force_interactive,
             set_cursor_stream,
+            focus_window,
             get_stage_size
         ])
         .setup(move |app| {

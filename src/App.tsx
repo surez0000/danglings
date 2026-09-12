@@ -487,24 +487,16 @@ export default function App() {
           </div>
           <div className="menu-divider" />
           <p className="menu-label">choose a charm</p>
-          <div className="roster">
+          <div className="charm-grid">
             {DEFAULT_CHARMS.map((c) => (
               <button
                 key={c.id}
-                className={`roster-card ${c.id === charm.id ? "active" : ""}`}
+                className={`charm-cell ${companion.kind === "charm" && c.id === charm.id ? "active" : ""}`}
+                title={c.name}
                 onClick={() => chooseCharm(c)}
               >
-                <span className="roster-glyph">
-                  <span className="roster-cord" />
-                  <span className="roster-bead" />
-                  <span className="roster-emoji">
-                    <CharmGlyph charm={c} size={30} />
-                  </span>
-                </span>
-                <span className="roster-name">{c.name}</span>
-                <span className="roster-tag">{c.region}</span>
-                <span className="roster-desc">{c.description}</span>
-                <span className="roster-action">{c.actionLabel}</span>
+                <span className="charm-cell-emoji">{c.emoji}</span>
+                <span className="charm-cell-name">{c.name}</span>
               </button>
             ))}
           </div>
@@ -515,6 +507,10 @@ export default function App() {
               value={customEmoji}
               placeholder="😀"
               maxLength={4}
+              // The overlay window never takes keyboard focus on its own
+              // (borderless accessory panel) — typing went to the app behind.
+              // Clicking the field explicitly makes our window key.
+              onPointerDown={() => invoke("focus_window").catch(() => {})}
               onChange={(e) => setCustomEmoji(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && applyCustomEmoji()}
             />
