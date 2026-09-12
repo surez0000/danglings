@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { CharmSize } from "../App";
@@ -60,6 +60,21 @@ function cordPoints(cord: { x: number; y: number }[]): string {
   return cord.map((p) => `${p.x},${p.y}`).join(" ");
 }
 
+/* Braided-rope rendering: layered strokes over one polyline — dark outline,
+   warm core, then alternating light/dark round-cap dashes that read as twists
+   and follow the physics curve for free. */
+const ROPE_LAYERS: Array<{
+  w: number;
+  stroke: string;
+  dash?: string;
+  dashOffset?: number;
+}> = [
+  { w: 6, stroke: "rgba(30, 19, 10, 0.85)" },
+  { w: 4.4, stroke: "#a97c50" },
+  { w: 4.4, stroke: "rgba(255, 238, 205, 0.3)", dash: "3 5.2" },
+  { w: 4.4, stroke: "rgba(46, 28, 14, 0.4)", dash: "3 5.2", dashOffset: 4.1 },
+];
+
 /* Tilt of the model's support: the seat bar's angle in seat mode; in hang mode
    the lean of the (invisible) pendulum cord from vertical, expressed so that
    `rotate(tilt)` swings the model's dangling end toward the physics bob. The
@@ -85,6 +100,7 @@ export default function BirdCompanion(props: BirdCompanionProps) {
 
   const [sceneStatus, setSceneStatus] = useState<SceneStatus>("loading");
   const [notes, setNotes] = useState<ChirpNote[]>([]);
+  const woodGradId = `wood-${useId()}`;
 
   // Latest-props ref so the rAF loop and event closures never go stale.
   const propsRef = useRef(props);
@@ -102,12 +118,9 @@ export default function BirdCompanion(props: BirdCompanionProps) {
   const glyphRef = useRef<HTMLDivElement | null>(null);
   const birdHitRef = useRef<HTMLDivElement | null>(null);
   const seatHitRef = useRef<HTMLDivElement | null>(null);
-  const leftUnderRef = useRef<SVGPolylineElement | null>(null);
-  const leftOverRef = useRef<SVGPolylineElement | null>(null);
-  const rightUnderRef = useRef<SVGPolylineElement | null>(null);
-  const rightOverRef = useRef<SVGPolylineElement | null>(null);
-  const barUnderRef = useRef<SVGLineElement | null>(null);
-  const barOverRef = useRef<SVGLineElement | null>(null);
+  const leftLayerRefs = useRef<(SVGPolylineElement | null)[]>([]);
+  const rightLayerRefs = useRef<(SVGPolylineElement | null)[]>([]);
+  const seatGroupRef = useRef<SVGGElement | null>(null);
 
   const rafRef = useRef(0);
   const loopModeRef = useRef<"running" | "stopped">("stopped");
@@ -164,19 +177,12 @@ export default function BirdCompanion(props: BirdCompanionProps) {
     if (s.attach === "seat") {
       const left = cordPoints(swing.left);
       const right = cordPoints(swing.right);
-      leftUnderRef.current?.setAttribute("points", left);
-      leftOverRef.current?.setAttribute("points", left);
-      rightUnderRef.current?.setAttribute("points", right);
-      rightOverRef.current?.setAttribute("points", right);
-      const l = swing.left[swing.left.length - 1];
-      const r = swing.right[swing.right.length - 1];
-      for (const bar of [barUnderRef.current, barOverRef.current]) {
-        if (!bar) continue;
-        bar.setAttribute("x1", String(l.x));
-        bar.setAttribute("y1", String(l.y));
-        bar.setAttribute("x2", String(r.x));
-        bar.setAttribute("y2", String(r.y));
-      }
+      for (const el of leftLayerRefs.current) el?.setAttribute("points", left);
+      for (const el of rightLayerRefs.current) el?.setAttribute("points", right);
+      seatGroupRef.current?.setAttribute(
+        "transform",
+        `translate(${seat.midX} ${seat.midY}) rotate(${(seat.barAngle * 180) / Math.PI})`,
+      );
     }
     // Hang mode draws no SVG at all — the model's baked rope is the rope.
   };
@@ -641,21 +647,79 @@ export default function BirdCompanion(props: BirdCompanionProps) {
   const isSeat = spec.attach === "seat";
   const leftNow = cordPoints(swingRef.current.left);
   const rightNow = cordPoints(swingRef.current.right);
-  const lNow = swingRef.current.left[swingRef.current.left.length - 1];
-  const rNow = swingRef.current.right[swingRef.current.right.length - 1];
   const glyphSize = Math.min(spec.modelPx, 96);
+  const halfSeat = spec.seatLen / 2;
 
   return (
     <>
       {/* Hang mode draws no SVG: the model's baked rope is the visible rope. */}
       {isSeat && (
         <svg className="thread" width={stage.width} height={stage.height}>
-          <polyline ref={leftUnderRef} points={leftNow} fill="none" stroke="rgba(20,16,12,0.55)" strokeWidth={3.2} strokeLinecap="round" />
-          <polyline ref={leftOverRef} points={leftNow} fill="none" stroke="rgba(255,250,240,0.85)" strokeWidth={1.1} strokeLinecap="round" />
-          <polyline ref={rightUnderRef} points={rightNow} fill="none" stroke="rgba(20,16,12,0.55)" strokeWidth={3.2} strokeLinecap="round" />
-          <polyline ref={rightOverRef} points={rightNow} fill="none" stroke="rgba(255,250,240,0.85)" strokeWidth={1.1} strokeLinecap="round" />
-          <line ref={barUnderRef} x1={lNow.x} y1={lNow.y} x2={rNow.x} y2={rNow.y} stroke="rgba(20,16,12,0.55)" strokeWidth={6.8} strokeLinecap="round" />
-          <line ref={barOverRef} x1={lNow.x} y1={lNow.y} x2={rNow.x} y2={rNow.y} stroke="#8a6b4a" strokeWidth={5} strokeLinecap="round" />
+          <defs>
+            <linearGradient id={woodGradId} gradientUnits="userSpaceOnUse" x1="0" y1="-4" x2="0" y2="4">
+              <stop offset="0" stopColor="#c79a66" />
+              <stop offset="0.55" stopColor="#a87c50" />
+              <stop offset="1" stopColor="#835d3e" />
+            </linearGradient>
+          </defs>
+          {ROPE_LAYERS.map((l, i) => (
+            <polyline
+              key={`l${i}`}
+              ref={(el) => {
+                leftLayerRefs.current[i] = el;
+              }}
+              points={leftNow}
+              fill="none"
+              stroke={l.stroke}
+              strokeWidth={l.w}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={l.dash}
+              strokeDashoffset={l.dashOffset}
+            />
+          ))}
+          {ROPE_LAYERS.map((l, i) => (
+            <polyline
+              key={`r${i}`}
+              ref={(el) => {
+                rightLayerRefs.current[i] = el;
+              }}
+              points={rightNow}
+              fill="none"
+              stroke={l.stroke}
+              strokeWidth={l.w}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={l.dash}
+              strokeDashoffset={l.dashOffset}
+            />
+          ))}
+          {/* Wooden plank seat, drawn centered at the origin and posed each
+              frame via the group transform: grain, top-light edge, and rope
+              lashings where the cords tie on. */}
+          <g
+            ref={seatGroupRef}
+            transform={`translate(${seatNow.midX} ${seatNow.midY}) rotate(${(seatNow.barAngle * 180) / Math.PI})`}
+          >
+            <rect x={-(halfSeat + 6)} y={-5} width={spec.seatLen + 12} height={10} rx={3.2} fill="rgba(30, 19, 10, 0.85)" />
+            <rect x={-(halfSeat + 5)} y={-4} width={spec.seatLen + 10} height={8} rx={2.6} fill={`url(#${woodGradId})`} />
+            <line x1={-(halfSeat + 3)} y1={-2.9} x2={halfSeat + 3} y2={-2.9} stroke="rgba(255, 235, 200, 0.4)" strokeWidth={0.8} strokeLinecap="round" />
+            <line x1={-(halfSeat - 2)} y1={-1.1} x2={halfSeat - 3} y2={-1.4} stroke="rgba(74, 46, 24, 0.4)" strokeWidth={0.8} strokeLinecap="round" />
+            <line x1={-(halfSeat - 4)} y1={1.5} x2={halfSeat - 2} y2={1.2} stroke="rgba(74, 46, 24, 0.35)" strokeWidth={0.8} strokeLinecap="round" />
+            {[-1, 1].map((sgn) => (
+              <rect
+                key={sgn}
+                x={sgn * halfSeat - 1.6}
+                y={-6}
+                width={3.2}
+                height={12}
+                rx={1.6}
+                fill="#96693f"
+                stroke="rgba(30, 19, 10, 0.6)"
+                strokeWidth={0.8}
+              />
+            ))}
+          </g>
         </svg>
       )}
 
