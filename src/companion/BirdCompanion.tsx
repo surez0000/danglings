@@ -335,8 +335,8 @@ export default function BirdCompanion(props: BirdCompanionProps) {
       // only hints at the turn; unrigged models rotate whole-body as before.
       scene.setPose(
         {
-          yaw: rigged ? clampedYaw * 0.25 : clampedYaw,
-          pitch: (rigged ? 0.35 : 1) * result.pose.pitch * d.pitchMul,
+          yaw: rigged ? clampedYaw * 0.1 : clampedYaw,
+          pitch: (rigged ? 0.15 : 1) * result.pose.pitch * d.pitchMul,
           roll: sceneRoll,
           offsetY: result.pose.offsetY * d.bobMul,
           scaleX: result.pose.scaleX,

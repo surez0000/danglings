@@ -55,10 +55,49 @@ loader.load(`/companions/${model}.glb`, (gltf) => {
   obj.scale.setScalar(s);
   obj.position.set(-center.x * s, -box.min.y * s, -center.z * s);
   scene.add(obj);
+  obj.traverse((o) => { if (o.isSkinnedMesh) o.frustumCulled = false; });
+
+  let rigInfo = "no bones";
+  if (params.has("rig")) {
+    // Same detection as birdScene.detectRig.
+    const bones = [];
+    obj.traverse((o) => { if (o.isBone) bones.push(o); });
+    obj.updateMatrixWorld(true);
+    if (bones.length) {
+      const pos = new Map(bones.map((b) => [b, b.getWorldPosition(new THREE.Vector3())]));
+      const fmt = (b) => b ? `${b.name}(${pos.get(b).x.toFixed(2)},${pos.get(b).y.toFixed(2)},${pos.get(b).z.toFixed(2)})` : "none";
+      const isLeaf = (b) => !b.children.some((c) => c.isBone);
+      const toWeighted = (b) => {
+        if (!b || !isLeaf(b)) return b;
+        const p = b.parent;
+        return p?.isBone && Math.abs((pos.get(p)?.x ?? 1)) < 0.15 ? p : b;
+      };
+      const central = bones.filter((b) => Math.abs(pos.get(b).x) < 0.15);
+      const head = toWeighted(central.filter((b) => pos.get(b).y > 0.4).sort((a, b) => pos.get(b).y - pos.get(a).y)[0] ?? null);
+      const wingRoot = (sign) => bones
+        .filter((b) => sign * pos.get(b).x > 0.08 && pos.get(b).y > 0.25)
+        .sort((a, b) => Math.abs(pos.get(a).x) - Math.abs(pos.get(b).x))[0] ?? null;
+      const tail = toWeighted(central.filter((b) => b !== head && pos.get(b).z < -0.1)
+        .sort((a, b) => pos.get(a).z - pos.get(b).z)[0] ?? null);
+      rigInfo = `bones: ${bones.length}\nHEAD ${fmt(head)}\nWL ${fmt(wingRoot(-1))} WR ${fmt(wingRoot(1))}\nTAIL ${fmt(tail)}\n` +
+        bones.map((b) => `${b.name}: ${pos.get(b).x.toFixed(2)},${pos.get(b).y.toFixed(2)},${pos.get(b).z.toFixed(2)}`).join("\n");
+      // Force-turn the head so skin influence is visible in a screenshot.
+      const named = params.get("bone") && bones.find((b) => b.name === params.get("bone"));
+      const target = named || head;
+      if (target && target.parent) {
+        rigInfo = `ROTATED: ${target.name}\n` + rigInfo;
+      }
+      if (target && target.parent) {
+        const parentInv = new THREE.Matrix4().copy(target.parent.matrixWorld).invert();
+        const axY = new THREE.Vector3(0, 1, 0).transformDirection(obj.matrixWorld).transformDirection(parentInv).normalize();
+        const angle = Number(params.get("rig")) || 0.6;
+        target.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axY, angle));
+      }
+    }
+  }
   document.getElementById("info").textContent =
     `${model}.glb\nraw bbox: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}\n` +
-    `aspect w/h: ${(size.x / size.y).toFixed(2)}  d/h: ${(size.z / size.y).toFixed(2)}\n` +
-    `blue axis = +z (should be the model's front)`;
+    `aspect w/h: ${(size.x / size.y).toFixed(2)}  d/h: ${(size.z / size.y).toFixed(2)}\n` + rigInfo;
 });
 
 camera.position.set(0, 0.6, 2.6);

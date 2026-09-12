@@ -90,9 +90,22 @@ function detectRig(model: Object3D): Rig | null {
   model.updateMatrixWorld(true);
   const pos = new Map<Bone, Vector3>(bones.map((b) => [b, b.getWorldPosition(new Vector3())]));
 
+  /* Auto-rig chains end in weightless leaf joints (pure end-markers): rotating
+     them moves nothing. When a pick is a leaf, step to its parent — that's the
+     joint actually bound to the mesh (verified on Meshy rigs: the top "head"
+     bone is inert, its parent turns the head). */
+  const isLeaf = (b: Bone) => !b.children.some((c) => (c as Bone).isBone);
+  const toWeighted = (b: Bone | null): Bone | null => {
+    if (!b || !isLeaf(b)) return b;
+    const p = b.parent as Bone | null;
+    if (p?.isBone && Math.abs(pos.get(p)?.x ?? 1) < 0.15) return p;
+    return b;
+  };
+
   const central = bones.filter((b) => Math.abs(pos.get(b)!.x) < 0.15);
-  const head =
-    central.filter((b) => pos.get(b)!.y > 0.4).sort((a, b) => pos.get(b)!.y - pos.get(a)!.y)[0] ?? null;
+  const head = toWeighted(
+    central.filter((b) => pos.get(b)!.y > 0.4).sort((a, b) => pos.get(b)!.y - pos.get(a)!.y)[0] ?? null,
+  );
   if (!head) return null;
 
   const wingRoot = (sign: number): Bone | null =>
@@ -100,10 +113,11 @@ function detectRig(model: Object3D): Rig | null {
       .filter((b) => sign * pos.get(b)!.x > 0.08 && pos.get(b)!.y > 0.25)
       .sort((a, b) => Math.abs(pos.get(a)!.x) - Math.abs(pos.get(b)!.x))[0] ?? null;
 
-  const tail =
+  const tail = toWeighted(
     central
       .filter((b) => b !== head && pos.get(b)!.z < -0.1)
-      .sort((a, b) => pos.get(a)!.z - pos.get(b)!.z)[0] ?? null;
+      .sort((a, b) => pos.get(a)!.z - pos.get(b)!.z)[0] ?? null,
+  );
 
   const ctl = (bone: Bone | null): BoneCtl | null => {
     if (!bone || !bone.parent) return null;
