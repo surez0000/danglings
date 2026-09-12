@@ -83,7 +83,10 @@ export function stepRope(
   for (let i = 1; i < points.length; i++) {
     const p = points[i];
     const clampedX = Math.min(Math.max(p.x, margin), width - margin);
-    const clampedY = Math.min(Math.max(p.y, margin), height - margin);
+    // Top bound is 0, not margin: the rope is anchored at the very top edge and
+    // clamping free points to y>=margin froze the first segments against an
+    // invisible wall ("stiff at the top, flexible below").
+    const clampedY = Math.min(Math.max(p.y, 0), height - margin);
     if (clampedX !== p.x) p.px = clampedX;
     if (clampedY !== p.y) p.py = clampedY;
     p.x = clampedX;

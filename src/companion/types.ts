@@ -164,10 +164,6 @@ const SEAT_RIG: Record<CharmSize, { seatLen: number; cordSegLen: number }> = {
   large: { seatLen: 72, cordSegLen: 28 },
 };
 
-/* Hang models keep the two-cord sim (seatLen 12 ≈ a single strand) with a short
-   cord — the model's own baked rope provides the rest of the visual length. */
-const HANG_CORD_SEG: Record<CharmSize, number> = { small: 10, medium: 12, large: 14 };
-
 export function companionSpec(def: CompanionDef, size: CharmSize): CompanionSizeSpec {
   const modelPx = def.heightPx[size];
   if (def.attach === "seat") {
@@ -182,8 +178,11 @@ export function companionSpec(def: CompanionDef, size: CharmSize): CompanionSize
       anchorFracY: SEAT_ANCHOR_FRAC,
     };
   }
+  /* Hang: the model's own baked rope IS the rope. Its top pins at the anchor
+     and the whole model swings rigidly around it (the canvas rotates via CSS).
+     The invisible physics cord is sized to the character's position down the
+     model (focusFrac), so the pendulum period matches what the eye sees. */
   const canvasH = Math.round(modelPx * 1.12);
-  /* Width buffer over the raw aspect so yaw rotation never clips the model. */
   const canvasW = Math.max(72, Math.round(canvasH * Math.max(def.aspect * 1.7, 0.4)));
   return {
     attach: "hang",
@@ -191,7 +190,7 @@ export function companionSpec(def: CompanionDef, size: CharmSize): CompanionSize
     canvasW,
     canvasH,
     seatLen: 12,
-    cordSegLen: HANG_CORD_SEG[size],
+    cordSegLen: Math.max(8, Math.round((modelPx * def.focusFrac) / 4)),
     anchorFracY: HANG_ANCHOR_FRAC,
   };
 }

@@ -114,7 +114,8 @@ function clampCord(cord: RopePoint[], bounds: { width: number; height: number; m
   for (let i = 1; i < cord.length; i++) {
     const p = cord[i];
     const clampedX = Math.min(Math.max(p.x, margin), width - margin);
-    const clampedY = Math.min(Math.max(p.y, margin), height - margin);
+    // Top bound 0, not margin — cords are anchored at the top edge (see stepRope).
+    const clampedY = Math.min(Math.max(p.y, 0), height - margin);
     if (clampedX !== p.x) p.px = clampedX;
     if (clampedY !== p.y) p.py = clampedY;
     p.x = clampedX;

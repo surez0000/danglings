@@ -25,8 +25,17 @@ export const cursorState: CursorState = {
   speed: 0,
 };
 
+/* The Rust cursor stream is global state, so it is refcounted here: React
+   StrictMode double-mounts effects in dev, and a naive start/stop pair loses
+   the race — the first mount's LATE async cleanup runs after the second mount
+   started and switches the stream off for good (bird stares into nothing). */
+let feedUsers = 0;
+
 export async function startCursorFeed(onWake: () => void): Promise<() => void> {
-  await invoke("set_cursor_stream", { active: true }).catch(() => {});
+  feedUsers++;
+  if (feedUsers === 1) {
+    invoke("set_cursor_stream", { active: true }).catch(() => {});
+  }
   const unlisten = await listen<[number, number]>(CURSOR_EVENT, (event) => {
     const [x, y] = event.payload;
     const now = performance.now();
@@ -42,8 +51,14 @@ export async function startCursorFeed(onWake: () => void): Promise<() => void> {
     cursorState.lastMoveAt = now;
     onWake();
   });
+  let disposed = false;
   return () => {
+    if (disposed) return;
+    disposed = true;
     unlisten();
-    invoke("set_cursor_stream", { active: false }).catch(() => {});
+    feedUsers--;
+    if (feedUsers === 0) {
+      invoke("set_cursor_stream", { active: false }).catch(() => {});
+    }
   };
 }

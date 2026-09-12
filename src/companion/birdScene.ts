@@ -6,14 +6,17 @@ import {
   Mesh,
   NoToneMapping,
   OrthographicCamera,
+  PMREMGenerator,
   Scene,
   SRGBColorSpace,
   Vector3,
   WebGLRenderer,
   type Material,
+  type Texture,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { DPR_CAP, HANG_ANCHOR_FRAC, SEAT_ANCHOR_FRAC, type CompanionAttach } from "./types";
 import type { BirdPose } from "./birdBehavior";
 
@@ -98,10 +101,25 @@ export async function createBirdScene(
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 30);
   applyFrustum(camera, opts.attach, dims);
 
+  /* Image-based environment lighting: PBR materials (especially anything with
+     metalness) render dark and muddy under punctual lights alone. The generated
+     RoomEnvironment is what standard GLTF viewers use — it is why models looked
+     right in the dev viewer's terms of vibrancy and must be regenerated
+     whenever the renderer (GL context) is rebuilt. */
+  let envTexture: Texture | null = null;
+  const applyEnvironment = () => {
+    envTexture?.dispose();
+    const pmrem = new PMREMGenerator(renderer);
+    envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    scene.environment = envTexture;
+  };
+  applyEnvironment();
+
   /* No shadows: the companion hangs mid-air, a shadow map would be a pointless
-     extra depth pass. */
-  scene.add(new HemisphereLight(0xbfd8ff, 0x8a7a66, 1.0));
-  const sun = new DirectionalLight(0xfff4e0, 1.2);
+     extra depth pass. The punctual lights add direction on top of the IBL. */
+  scene.add(new HemisphereLight(0xbfd8ff, 0x8a7a66, 0.5));
+  const sun = new DirectionalLight(0xfff4e0, 1.4);
   sun.position.set(1.5, 2.5, 2);
   scene.add(sun);
 
@@ -144,6 +162,7 @@ export async function createBirdScene(
     if (disposed) return;
     renderer.dispose();
     renderer = buildRenderer(canvas, dims.canvasW, dims.canvasH, dpr);
+    applyEnvironment();
     forEachMaterial(gltf.scene, (m) => {
       m.needsUpdate = true;
     });
@@ -170,6 +189,7 @@ export async function createBirdScene(
     },
     dispose() {
       disposed = true;
+      envTexture?.dispose();
       canvas.removeEventListener("webglcontextlost", onContextLost);
       canvas.removeEventListener("webglcontextrestored", onContextRestored);
       gltf.scene.traverse((obj) => {

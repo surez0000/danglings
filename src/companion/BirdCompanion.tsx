@@ -58,28 +58,22 @@ function cordPoints(cord: { x: number; y: number }[]): string {
   return cord.map((p) => `${p.x},${p.y}`).join(" ");
 }
 
-/* Hang mode draws the two (nearly merged) cords as one strand down their midline. */
-function midCordPoints(swing: Swing): string {
-  return swing.left
-    .map((p, i) => `${(p.x + swing.right[i].x) / 2},${(p.y + swing.right[i].y) / 2}`)
-    .join(" ");
-}
-
-/* Screen-clockwise tilt of the model's support: the seat bar's angle in seat
-   mode; the cord's lean from vertical in hang mode (the tiny seat bar makes
-   barAngle numerically noisy there). */
-function swingTilt(swing: Swing, seat: SeatState, attach: "seat" | "hang"): number {
+/* Tilt of the model's support: the seat bar's angle in seat mode; in hang mode
+   the lean of the (invisible) pendulum cord from vertical, expressed so that
+   `rotate(tilt)` swings the model's dangling end toward the physics bob. The
+   physics bob sits at the character's position (cord length = focusFrac ×
+   modelPx), so the character visually rides the pendulum. */
+function swingTilt(anchorX: number, anchorY: number, seat: SeatState, attach: "seat" | "hang"): number {
   if (attach === "seat") return seat.barAngle;
-  const top = swing.left[0];
-  const dx = seat.midX - (top.x + swing.right[0].x) / 2;
-  const dy = seat.midY - top.y;
+  const dx = seat.midX - anchorX;
+  const dy = seat.midY - anchorY;
   return -Math.atan2(dx, Math.max(dy, 1));
 }
 
-/* The face's y offset from the attach point: seat models stand above the seat,
-   hang models dangle below their rope top. */
-function headOffsetY(spec: CompanionSizeSpec, focusFrac: number): number {
-  return spec.attach === "seat" ? -spec.modelPx * 0.72 : spec.modelPx * focusFrac;
+/* The face's y offset from the tracked point: seat models stand above the seat;
+   hang models' physics bob IS the character position (see swingTilt). */
+function headOffsetY(spec: CompanionSizeSpec): number {
+  return spec.attach === "seat" ? -spec.modelPx * 0.72 : 0;
 }
 
 export default function BirdCompanion(props: BirdCompanionProps) {
@@ -133,18 +127,27 @@ export default function BirdCompanion(props: BirdCompanionProps) {
   const vignetteTimerRef = useRef<number | undefined>(undefined);
   const noteIdRef = useRef(0);
 
-  const canvasTransform = (seat: SeatState, s: CompanionSizeSpec) =>
-    `translate3d(${seat.midX - s.canvasW / 2}px, ${seat.midY - s.canvasH * s.anchorFracY}px, 0)`;
+  /* Seat mode: the canvas glides with the seat, rotation happens in-scene.
+     Hang mode: the canvas is PINNED at the anchor (the model's baked rope
+     starts at the top edge) and the whole canvas rotates around the attach
+     point via CSS — no in-scene tilt, no rotation clipping. */
+  const canvasTransform = (seat: SeatState, s: CompanionSizeSpec, tilt: number) => {
+    if (s.attach === "seat") {
+      return `translate3d(${seat.midX - s.canvasW / 2}px, ${seat.midY - s.canvasH * s.anchorFracY}px, 0)`;
+    }
+    const { anchorX: ax, anchorY: ay } = propsRef.current;
+    return `translate3d(${ax - s.canvasW / 2}px, ${ay - s.canvasH * s.anchorFracY}px, 0) rotate(${tilt}rad)`;
+  };
   const glyphTransform = (seat: SeatState, s: CompanionSizeSpec, tilt: number) => {
     const gsize = Math.min(s.modelPx, 96);
-    const top = s.attach === "seat" ? seat.midY - gsize : seat.midY + s.modelPx * 0.35 - gsize / 2;
+    const top = s.attach === "seat" ? seat.midY - gsize : seat.midY - gsize / 2;
     return `translate3d(${seat.midX - gsize / 2}px, ${top}px, 0) rotate(${tilt}rad)`;
   };
   const birdHitTransform = (seat: SeatState, s: CompanionSizeSpec) => {
     if (s.attach === "seat") {
       return `translate3d(${seat.midX - (s.modelPx * 1.2) / 2}px, ${seat.midY - s.modelPx * 0.45 - (s.modelPx * 1.3) / 2}px, 0)`;
     }
-    return `translate3d(${seat.midX - hitW(s) / 2}px, ${seat.midY + s.modelPx * 0.02}px, 0)`;
+    return `translate3d(${seat.midX - hitW(s) / 2}px, ${seat.midY - (s.modelPx * 0.5) / 2}px, 0)`;
   };
   const seatHitTransform = (seat: SeatState, s: CompanionSizeSpec) =>
     `translate3d(${seat.midX - (s.seatLen + 16) / 2}px, ${seat.midY - 7}px, 0) rotate(${seat.barAngle}rad)`;
@@ -152,7 +155,7 @@ export default function BirdCompanion(props: BirdCompanionProps) {
 
   const updateDom = (seat: SeatState, s: CompanionSizeSpec, tilt: number) => {
     const swing = swingRef.current!;
-    if (canvasRef.current) canvasRef.current.style.transform = canvasTransform(seat, s);
+    if (canvasRef.current) canvasRef.current.style.transform = canvasTransform(seat, s, tilt);
     if (glyphRef.current) glyphRef.current.style.transform = glyphTransform(seat, s, tilt);
     if (birdHitRef.current) birdHitRef.current.style.transform = birdHitTransform(seat, s);
     if (seatHitRef.current) seatHitRef.current.style.transform = seatHitTransform(seat, s);
@@ -172,11 +175,8 @@ export default function BirdCompanion(props: BirdCompanionProps) {
         bar.setAttribute("x2", String(r.x));
         bar.setAttribute("y2", String(r.y));
       }
-    } else {
-      const mid = midCordPoints(swing);
-      leftUnderRef.current?.setAttribute("points", mid);
-      leftOverRef.current?.setAttribute("points", mid);
     }
+    // Hang mode draws no SVG at all — the model's baked rope is the rope.
   };
 
   const sendHitPoints = (swing: Swing, seat: SeatState, s: CompanionSizeSpec) => {
@@ -198,14 +198,14 @@ export default function BirdCompanion(props: BirdCompanionProps) {
         [seat.midX, seat.midY - s.modelPx * 0.72],
       ];
     } else {
-      // Anchor, cord, then points spaced down the dangling model.
-      pts = [
-        [swing.left[0].x, swing.left[0].y],
-        [(swing.left[2].x + swing.right[2].x) / 2, (swing.left[2].y + swing.right[2].y) / 2],
-        [seat.midX, seat.midY],
-      ];
-      for (const f of [0.08, 0.3, 0.52, 0.74, 0.94]) {
-        pts.push([seat.midX, seat.midY + s.modelPx * f]);
+      // Points spaced along the tilted model line, anchor through bob to tail.
+      const { anchorX: ax, anchorY: ay } = propsRef.current;
+      const len = Math.hypot(seat.midX - ax, seat.midY - ay) || 1;
+      const ux = (seat.midX - ax) / len;
+      const uy = (seat.midY - ay) / len;
+      pts = [[ax, ay]];
+      for (const f of [0.15, 0.35, 0.55, 0.75, 0.95]) {
+        pts.push([ax + ux * s.modelPx * f, ay + uy * s.modelPx * f]);
       }
     }
     const last = lastSentRef.current;
@@ -275,8 +275,8 @@ export default function BirdCompanion(props: BirdCompanionProps) {
       sleepFramesRef.current = 0;
     }
 
-    const headY = seat.midY + headOffsetY(s, d.focusFrac);
-    const centerY = s.attach === "seat" ? seat.midY - s.modelPx * 0.45 : headY + s.modelPx * 0.08;
+    const headY = seat.midY + headOffsetY(s);
+    const centerY = s.attach === "seat" ? seat.midY - s.modelPx * 0.45 : seat.midY + s.modelPx * 0.06;
     const ctx: BehaviorCtx = {
       now,
       dt: dtMs / 1000,
@@ -303,7 +303,7 @@ export default function BirdCompanion(props: BirdCompanionProps) {
     // click); flutter has no mapped sound yet.
     if (result.sfx === "peck") playPeck();
 
-    const tilt = swingTilt(swing, seat, s.attach);
+    const tilt = swingTilt(anchorX, anchorY, seat, s.attach);
 
     // Render tiers: 60fps while dragging / just released / one-shots, else 30fps.
     const active =
@@ -315,14 +315,17 @@ export default function BirdCompanion(props: BirdCompanionProps) {
       (result.wantsRender || seat.energy > ENERGY_SLEEP || dragRef.current !== null) &&
       now - lastRenderTsRef.current >= interval
     ) {
-      // Swing tilt happens in-scene so the lights stay world-stable; the model
-      // also leans into the swing with its momentum. Per-companion motion
+      // Seat mode tilts in-scene (lights stay world-stable, model leans into
+      // its momentum); hang mode tilts the whole CANVAS via CSS, so the scene
+      // only carries the behavior's micro-roll. Per-companion motion
       // personality is applied here (clamped yaw, scaled pitch/bob).
       const lean = Math.min(Math.max(seat.velX * 0.02, -0.18), 0.18);
+      const sceneRoll =
+        s.attach === "seat" ? result.pose.roll - tilt + lean : result.pose.roll + lean * 0.4;
       scene.setPose({
         yaw: Math.min(Math.max(result.pose.yaw, -d.yawClamp), d.yawClamp),
         pitch: result.pose.pitch * d.pitchMul,
-        roll: result.pose.roll - tilt + lean,
+        roll: sceneRoll,
         offsetY: result.pose.offsetY * d.bobMul,
         scaleX: result.pose.scaleX,
         scaleY: result.pose.scaleY,
@@ -516,7 +519,7 @@ export default function BirdCompanion(props: BirdCompanionProps) {
     if (!seat) return;
     const d = COMPANION_BY_ID[propsRef.current.companionId];
     const sp = companionSpec(d, propsRef.current.size);
-    const y = seat.midY + headOffsetY(sp, d.focusFrac) - 22;
+    const y = seat.midY + headOffsetY(sp) - 22;
     const id = ++noteIdRef.current;
     setNotes((n) => [...n, { id, x: seat.midX + 6, y }]);
     window.setTimeout(() => setNotes((n) => n.filter((note) => note.id !== id)), 900);
@@ -571,7 +574,7 @@ export default function BirdCompanion(props: BirdCompanionProps) {
     const sp = companionSpec(d, propsRef.current.size);
     const x = seat ? seat.midX : propsRef.current.anchorX;
     const baseY = seat ? seat.midY : propsRef.current.anchorY;
-    const y = sp.attach === "seat" ? baseY + sp.modelPx * 0.6 + 18 : baseY + sp.modelPx + 18;
+    const y = sp.attach === "seat" ? baseY + sp.modelPx * 0.6 + 18 : baseY + sp.modelPx * 0.35 + 18;
     propsRef.current.onRequestMenu(x, y);
     ensureLoop();
   };
@@ -580,10 +583,10 @@ export default function BirdCompanion(props: BirdCompanionProps) {
   // re-render writes current values rather than stale ones (the rAF loop keeps
   // mutating them between renders).
   const seatNow = readSeat(swingRef.current, null);
-  const tiltNow = swingTilt(swingRef.current, seatNow, spec.attach);
+  const tiltNow = swingTilt(props.anchorX, props.anchorY, seatNow, spec.attach);
   const showGlyph = sceneStatus !== "ready";
   const isSeat = spec.attach === "seat";
-  const leftNow = isSeat ? cordPoints(swingRef.current.left) : midCordPoints(swingRef.current);
+  const leftNow = cordPoints(swingRef.current.left);
   const rightNow = cordPoints(swingRef.current.right);
   const lNow = swingRef.current.left[swingRef.current.left.length - 1];
   const rNow = swingRef.current.right[swingRef.current.right.length - 1];
@@ -591,18 +594,17 @@ export default function BirdCompanion(props: BirdCompanionProps) {
 
   return (
     <>
-      <svg className="thread" width={stage.width} height={stage.height}>
-        <polyline ref={leftUnderRef} points={leftNow} fill="none" stroke="rgba(20,16,12,0.55)" strokeWidth={3.2} strokeLinecap="round" />
-        <polyline ref={leftOverRef} points={leftNow} fill="none" stroke="rgba(255,250,240,0.85)" strokeWidth={1.1} strokeLinecap="round" />
-        {isSeat && (
-          <>
-            <polyline ref={rightUnderRef} points={rightNow} fill="none" stroke="rgba(20,16,12,0.55)" strokeWidth={3.2} strokeLinecap="round" />
-            <polyline ref={rightOverRef} points={rightNow} fill="none" stroke="rgba(255,250,240,0.85)" strokeWidth={1.1} strokeLinecap="round" />
-            <line ref={barUnderRef} x1={lNow.x} y1={lNow.y} x2={rNow.x} y2={rNow.y} stroke="rgba(20,16,12,0.55)" strokeWidth={6.8} strokeLinecap="round" />
-            <line ref={barOverRef} x1={lNow.x} y1={lNow.y} x2={rNow.x} y2={rNow.y} stroke="#8a6b4a" strokeWidth={5} strokeLinecap="round" />
-          </>
-        )}
-      </svg>
+      {/* Hang mode draws no SVG: the model's baked rope is the visible rope. */}
+      {isSeat && (
+        <svg className="thread" width={stage.width} height={stage.height}>
+          <polyline ref={leftUnderRef} points={leftNow} fill="none" stroke="rgba(20,16,12,0.55)" strokeWidth={3.2} strokeLinecap="round" />
+          <polyline ref={leftOverRef} points={leftNow} fill="none" stroke="rgba(255,250,240,0.85)" strokeWidth={1.1} strokeLinecap="round" />
+          <polyline ref={rightUnderRef} points={rightNow} fill="none" stroke="rgba(20,16,12,0.55)" strokeWidth={3.2} strokeLinecap="round" />
+          <polyline ref={rightOverRef} points={rightNow} fill="none" stroke="rgba(255,250,240,0.85)" strokeWidth={1.1} strokeLinecap="round" />
+          <line ref={barUnderRef} x1={lNow.x} y1={lNow.y} x2={rNow.x} y2={rNow.y} stroke="rgba(20,16,12,0.55)" strokeWidth={6.8} strokeLinecap="round" />
+          <line ref={barOverRef} x1={lNow.x} y1={lNow.y} x2={rNow.x} y2={rNow.y} stroke="#8a6b4a" strokeWidth={5} strokeLinecap="round" />
+        </svg>
+      )}
 
       {/* Positioning basics are inlined (not only in .bird-canvas/.bird-hit/
           .seat-hit CSS) because every per-frame transform assumes an origin of
@@ -618,7 +620,10 @@ export default function BirdCompanion(props: BirdCompanionProps) {
           height: spec.canvasH,
           pointerEvents: "none",
           visibility: showGlyph ? "hidden" : "visible",
-          transform: canvasTransform(seatNow, spec),
+          // Hang mode rotates the canvas around the rope-top attach point.
+          transformOrigin: `50% ${spec.anchorFracY * 100}%`,
+          willChange: "transform",
+          transform: canvasTransform(seatNow, spec, tiltNow),
         }}
       />
 
