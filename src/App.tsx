@@ -1,11 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { createRope, stepRope, type RopePoint } from "./useRope";
 import { DEFAULT_CHARMS, ritualFor, type Charm, type RitualType } from "./charms";
 import { playRitualSound } from "./sound";
 import { CharmGlyph } from "./charmArt";
+// Bundle boundary: App may statically import only types/companionStore/BirdGlyph
+// from src/companion — BirdCompanion (and through it three.js) stays lazy.
+import { COMPANIONS, type CompanionSelection } from "./companion/types";
+import { loadCompanion, saveCompanion } from "./companion/companionStore";
+import { BirdGlyph } from "./companion/BirdGlyph";
 import "./App.css";
+
+const BirdCompanion = lazy(() => import("./companion/BirdCompanion"));
 
 const MAX_TILT_DEG = 22;
 
@@ -55,8 +62,10 @@ export default function App() {
   const [stage, setStage] = useState<{ width: number; height: number } | null>(null);
   const [anchorX, setAnchorX] = useState(400);
   const [charm, setCharm] = useState<Charm>(loadCharm);
+  const [companion, setCompanion] = useState<CompanionSelection>(loadCompanion);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [customEmoji, setCustomEmoji] = useState("");
   const [activeRitual, setActiveRitual] = useState<RitualType | null>(null);
   const [charmPos, setCharmPos] = useState({ x: 400, y: ANCHOR_Y + CHARM_INDEX * 16 });
@@ -95,7 +104,12 @@ export default function App() {
   }, [charm]);
 
   useEffect(() => {
-    if (!stage) return;
+    saveCompanion(companion);
+  }, [companion]);
+
+  useEffect(() => {
+    // In bird mode BirdCompanion owns the only loop (and hit-point sends).
+    if (!stage || companion.kind !== "charm") return;
     let raf = 0;
     const bounds = { width: stage.width, height: stage.height, margin: MARGIN };
     const tick = () => {
@@ -120,7 +134,7 @@ export default function App() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [stage]);
+  }, [stage, companion.kind]);
 
   useEffect(() => {
     const unlisten = listen("recenter", () => {
@@ -218,6 +232,13 @@ export default function App() {
 
   const chooseCharm = (c: Charm) => {
     setCharm(c);
+    setCompanion({ kind: "charm" });
+    setMenuOpen(false);
+    setForceInteractive(false);
+  };
+
+  const chooseCompanion = (c: CompanionSelection) => {
+    setCompanion(c);
     setMenuOpen(false);
     setForceInteractive(false);
   };
@@ -234,6 +255,7 @@ export default function App() {
       description: "A charm of your own choosing, hung on the same thread as the rest.",
       actionLabel: "Give it a shake",
     });
+    setCompanion({ kind: "charm" });
     setCustomEmoji("");
     setMenuOpen(false);
     setForceInteractive(false);
@@ -249,6 +271,13 @@ export default function App() {
   const rope = pointsRef.current;
   const points = rope.map((p) => `${p.x},${p.y}`).join(" ");
   const charmCenterY = charmPos.y + sizePx / 2;
+  const birdMode = companion.kind === "companion";
+  // Menu anchor: companion mode uses the coords BirdCompanion passes to
+  // onRequestMenu (already offset below the model); charm mode keeps the
+  // existing charm math.
+  const menuAnchorX = birdMode && menuPos ? menuPos.x : charmPos.x;
+  const menuTop = birdMode && menuPos ? menuPos.y : charmPos.y + sizePx + 18;
+  const menuLeft = Math.min(Math.max(menuAnchorX - 145, 12), stage.width - 302);
 
   return (
     <div
@@ -256,12 +285,14 @@ export default function App() {
       style={{ width: stage.width, height: stage.height }}
       onPointerDown={() => menuOpen && closeMenu()}
     >
-      <svg className="thread" width={stage.width} height={stage.height}>
-        <polyline points={points} fill="none" stroke="rgba(20,16,12,0.55)" strokeWidth={3.2} strokeLinecap="round" />
-        <polyline points={points} fill="none" stroke="rgba(255,250,240,0.85)" strokeWidth={1.1} strokeLinecap="round" />
-        <circle cx={charmPos.x} cy={charmPos.y} r={2.6} fill="rgba(20,16,12,0.8)" />
-        <circle cx={charmPos.x} cy={charmPos.y} r={1.2} fill="rgba(255,250,240,0.9)" />
-      </svg>
+      {!birdMode && (
+        <svg className="thread" width={stage.width} height={stage.height}>
+          <polyline points={points} fill="none" stroke="rgba(20,16,12,0.55)" strokeWidth={3.2} strokeLinecap="round" />
+          <polyline points={points} fill="none" stroke="rgba(255,250,240,0.85)" strokeWidth={1.1} strokeLinecap="round" />
+          <circle cx={charmPos.x} cy={charmPos.y} r={2.6} fill="rgba(20,16,12,0.8)" />
+          <circle cx={charmPos.x} cy={charmPos.y} r={1.2} fill="rgba(255,250,240,0.9)" />
+        </svg>
+      )}
 
       <div
         className="anchor-handle"
@@ -272,50 +303,101 @@ export default function App() {
         title="Drag to move along the top"
       />
 
-      {activeRitual === "sparkle" && (
+      {!birdMode && activeRitual === "sparkle" && (
         <div className="sparkle-burst" style={{ left: charmPos.x, top: charmCenterY }}>
           {Array.from({ length: 6 }).map((_, i) => (
             <span key={i} className="spark" style={{ "--i": i } as React.CSSProperties} />
           ))}
         </div>
       )}
-      {activeRitual === "chime" && (
+      {!birdMode && activeRitual === "chime" && (
         <div className="chime-rings" style={{ left: charmPos.x, top: charmCenterY }}>
           <span className="ring" />
           <span className="ring ring-delay" />
         </div>
       )}
 
-      <div
-        data-charm
-        className="charm"
-        style={{
-          left: charmPos.x,
-          top: charmPos.y,
-          transform: `translate(-50%, -2px) translate(${lean.x}px, ${lean.y}px) rotateZ(${(tilt + lean.x * 0.6).toFixed(2)}deg) rotateY(${(tilt * 1.3).toFixed(2)}deg)`,
-        }}
-        onPointerDown={onCharmPointerDown}
-        onPointerMove={onCharmPointerMove}
-        onPointerUp={onCharmPointerUp}
-        onPointerLeave={onCharmPointerLeave}
-        onContextMenu={onCharmContextMenu}
-        title={`${charm.name} — click for a ritual, right-click to change`}
-      >
-        <span className={`charm-inner ${activeRitual ? `ritual-${activeRitual}` : "idle"}`}>
-          <CharmGlyph charm={charm} size={sizePx} />
-        </span>
-      </div>
+      {!birdMode && (
+        <div
+          data-charm
+          className="charm"
+          style={{
+            left: charmPos.x,
+            top: charmPos.y,
+            transform: `translate(-50%, -2px) translate(${lean.x}px, ${lean.y}px) rotateZ(${(tilt + lean.x * 0.6).toFixed(2)}deg) rotateY(${(tilt * 1.3).toFixed(2)}deg)`,
+          }}
+          onPointerDown={onCharmPointerDown}
+          onPointerMove={onCharmPointerMove}
+          onPointerUp={onCharmPointerUp}
+          onPointerLeave={onCharmPointerLeave}
+          onContextMenu={onCharmContextMenu}
+          title={`${charm.name} — click for a ritual, right-click to change`}
+        >
+          <span className={`charm-inner ${activeRitual ? `ritual-${activeRitual}` : "idle"}`}>
+            <CharmGlyph charm={charm} size={sizePx} />
+          </span>
+        </div>
+      )}
+
+      {companion.kind === "companion" && (
+        <Suspense fallback={null}>
+          <BirdCompanion
+            stage={stage}
+            anchorX={anchorX}
+            anchorY={ANCHOR_Y}
+            companionId={companion.id}
+            size={settings.size}
+            windEnabled={settings.windEnabled}
+            windIntensity={settings.windIntensity}
+            onRequestMenu={(x, y) => {
+              setMenuPos({ x, y });
+              setMenuOpen(true);
+              setForceInteractive(true);
+            }}
+            setForceInteractive={setForceInteractive}
+          />
+        </Suspense>
+      )}
 
       {menuOpen && (
         <div
           className="menu"
           style={{
-            left: Math.min(Math.max(charmPos.x - 145, 12), stage.width - 302),
-            top: charmPos.y + sizePx + 18,
+            left: menuLeft,
+            top: menuTop,
           }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <div className="menu-arrow" style={{ left: Math.min(133, charmPos.x - Math.max(charmPos.x - 145, 12) - 8) }} />
+          <div className="menu-arrow" style={{ left: Math.min(133, menuAnchorX - Math.max(menuAnchorX - 145, 12) - 8) }} />
+          <p className="menu-label">companions</p>
+          <div className="companion-row">
+            <button
+              className={`companion-card ${companion.kind === "charm" ? "active" : ""}`}
+              onClick={() => chooseCompanion({ kind: "charm" })}
+            >
+              <span className="companion-thumb">
+                <CharmGlyph charm={charm} size={30} />
+              </span>
+              <span className="companion-name">Classic charm</span>
+              <span className="companion-desc">Your lucky charm on its thread, right where you left it.</span>
+              <span className="companion-action">Hang it up</span>
+            </button>
+            {COMPANIONS.map((c) => (
+              <button
+                key={c.id}
+                className={`companion-card ${companion.kind === "companion" && companion.id === c.id ? "active" : ""}`}
+                onClick={() => chooseCompanion({ kind: "companion", id: c.id })}
+              >
+                <span className="companion-thumb">
+                  {c.id === "bluebird" ? <BirdGlyph size={30} /> : <span className="companion-emoji">{c.emoji}</span>}
+                </span>
+                <span className="companion-name">{c.name}</span>
+                <span className="companion-desc">{c.description}</span>
+                <span className="companion-action">{c.actionLabel}</span>
+              </button>
+            ))}
+          </div>
+          <div className="menu-divider" />
           <p className="menu-label">choose a charm</p>
           <div className="roster">
             {DEFAULT_CHARMS.map((c) => (

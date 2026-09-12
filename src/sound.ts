@@ -197,3 +197,33 @@ export function playRitualSound(ritual: RitualType) {
     // audio unsupported/blocked — fail silently
   }
 }
+
+export function isAudioReady(): boolean {
+  return ctx !== null && ctx.state === "running";
+}
+
+// Bird chirp: a 5ms noise transient, then two short triangle blips glissing
+// 2.8kHz -> 3.4kHz. Click-driven (a real user gesture), so it goes through the
+// normal getCtx() path and may create/resume the context.
+export function playChirp() {
+  try {
+    const t = getCtx().currentTime;
+    noiseBurst(t, 0.005, { filterHz: 3200, q: 8, gain: 0.05, wet: 0.08 });
+    tone(2800, t + 0.005, 0.08, { type: "triangle", sweepTo: 3400, gain: 0.15, wet: 0.1 });
+    tone(2800, t + 0.11, 0.08, { type: "triangle", sweepTo: 3400, gain: 0.12, wet: 0.1 });
+  } catch {
+    // audio unsupported/blocked — fail silently
+  }
+}
+
+// Bird peck: a single 30ms noise tick. Fires with NO user gesture, so it must
+// never create or resume the context — silent until the first real click.
+export function playPeck() {
+  if (!isAudioReady()) return;
+  try {
+    const t = getCtx().currentTime;
+    noiseBurst(t, 0.03, { filterHz: 2400, q: 7, gain: 0.07, wet: 0.06 });
+  } catch {
+    // audio unsupported/blocked — fail silently
+  }
+}

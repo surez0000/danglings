@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Danglings model viewer (dev only)</title>
+<style>
+  body { margin: 0; background: #6a7b8c; }
+  #info { position: fixed; top: 8px; left: 8px; color: #fff; font: 13px monospace; white-space: pre; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<div id="info"></div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const params = new URLSearchParams(location.search);
+const model = params.get("model") || "bluebird";
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x6a7b8c);
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.01, 100);
+scene.add(new THREE.HemisphereLight(0xbfd8ff, 0x8a7a66, 1.0));
+const dir = new THREE.DirectionalLight(0xfff4e0, 1.2);
+dir.position.set(1.5, 2.5, 2);
+scene.add(dir);
+
+const grid = new THREE.GridHelper(4, 8, 0xffffff, 0x99a6b2);
+scene.add(grid);
+scene.add(new THREE.AxesHelper(1.2)); // x red, y green, z blue
+
+const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder);
+loader.load(`/companions/${model}.glb`, (gltf) => {
+  const obj = gltf.scene;
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  // Normalize like birdScene: height 1, feet at y=0, centered x/z.
+  const s = 1 / size.y;
+  obj.scale.setScalar(s);
+  obj.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+  scene.add(obj);
+  document.getElementById("info").textContent =
+    `${model}.glb\nraw bbox: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}\n` +
+    `aspect w/h: ${(size.x / size.y).toFixed(2)}  d/h: ${(size.z / size.y).toFixed(2)}\n` +
+    `blue axis = +z (should be the model's front)`;
+});
+
+camera.position.set(0, 0.6, 2.6);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.5, 0);
+controls.update();
+
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

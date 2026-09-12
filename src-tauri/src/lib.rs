@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -15,9 +15,14 @@ use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 const HIT_RADIUS_ENTER: f64 = 42.0;
 const HIT_RADIUS_EXIT: f64 = 58.0;
 
+const CURSOR_DEADBAND_PX: f64 = 2.0;
+const CURSOR_EMIT_MIN_INTERVAL: Duration = Duration::from_millis(33);
+const CURSOR_SETTLE_INTERVAL: Duration = Duration::from_millis(150);
+
 struct HitState {
     points: Vec<(f64, f64)>,
     force_interactive: bool,
+    cursor_stream: bool,
 }
 
 type SharedHitState = Arc<Mutex<HitState>>;
@@ -32,6 +37,12 @@ fn update_hit_points(state: tauri::State<SharedHitState>, points: Vec<(f64, f64)
 fn set_force_interactive(state: tauri::State<SharedHitState>, active: bool) {
     let mut s = state.lock().unwrap();
     s.force_interactive = active;
+}
+
+#[tauri::command]
+fn set_cursor_stream(state: tauri::State<SharedHitState>, active: bool) {
+    let mut s = state.lock().unwrap();
+    s.cursor_stream = active;
 }
 
 #[tauri::command]
@@ -62,6 +73,8 @@ fn cursor_local(window_pos: (f64, f64), scale: f64) -> Option<(f64, f64)> {
     }
 }
 
+// Assumes the window sits on the primary monitor, whose CoreGraphics origin is
+// (0, 0); multi-monitor is out of scope for v1.
 #[cfg(target_os = "macos")]
 fn cursor_local(window_pos: (f64, f64), scale: f64) -> Option<(f64, f64)> {
     use core_graphics::event::CGEvent;
@@ -84,18 +97,56 @@ fn cover_primary_monitor(window: &WebviewWindow) {
     }
 }
 
+// The visibleOnAllWorkspaces config key sets CanJoinAllSpaces at window creation,
+// but tao's runtime set_visible_on_all_workspaces rewrites the whole
+// collectionBehavior bitmask — so the full overlay mask is asserted here via raw
+// AppKit instead, and set_visible_on_all_workspaces must never be called.
+// FullScreenAuxiliary (public API since 10.7, no notarization risk) keeps the
+// overlay on fullscreen Spaces; Stationary keeps Exposé from sweeping it;
+// IgnoresCycle keeps it out of Cmd+`. If QA ever finds the overlay hidden behind
+// a fullscreen app's content, the documented escalation is
+// setLevel(NSPopUpMenuWindowLevel) via this same objc2 path — do not ship it by
+// default (higher levels sit above the fullscreen menu-bar reveal).
+#[cfg(target_os = "macos")]
+fn apply_macos_overlay_behavior(window: &WebviewWindow) {
+    use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior};
+    let win = window.clone();
+    // AppKit is main-thread-only.
+    let _ = window.run_on_main_thread(move || {
+        let Ok(ns) = win.ns_window() else { return };
+        let ns = ns as *mut NSWindow;
+        unsafe {
+            (&*ns).setCollectionBehavior(
+                NSWindowCollectionBehavior::CanJoinAllSpaces
+                    | NSWindowCollectionBehavior::FullScreenAuxiliary
+                    | NSWindowCollectionBehavior::Stationary
+                    | NSWindowCollectionBehavior::IgnoresCycle,
+            );
+        }
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_macos_overlay_behavior(_window: &WebviewWindow) {}
+
 fn toggle_charm(window: &WebviewWindow) {
     if window.is_visible().unwrap_or(false) {
         let _ = window.hide();
+        let _ = window.emit("overlay-visibility", false);
     } else {
         cover_primary_monitor(window);
         let _ = window.show();
+        apply_macos_overlay_behavior(window);
+        let _ = window.emit("overlay-visibility", true);
     }
 }
 
 fn start_hit_test_loop(app: tauri::AppHandle, state: SharedHitState) {
     thread::spawn(move || {
         let mut currently_interactive = false;
+        let mut last_sent: Option<(f64, f64)> = None;
+        let mut last_emit = Instant::now();
+        let mut pending = false;
         loop {
             thread::sleep(Duration::from_millis(16));
             let Some(window) = app.get_webview_window("main") else {
@@ -111,12 +162,14 @@ fn start_hit_test_loop(app: tauri::AppHandle, state: SharedHitState) {
                 .map(|p| (p.x as f64, p.y as f64))
                 .unwrap_or((0.0, 0.0));
 
-            let (force, points) = {
+            let (force, cursor_stream, points) = {
                 let s = state.lock().unwrap();
-                (s.force_interactive, s.points.clone())
+                (s.force_interactive, s.cursor_stream, s.points.clone())
             };
 
-            let near_charm = if let Some((local_x, local_y)) = cursor_local(window_pos, scale) {
+            let cursor = cursor_local(window_pos, scale);
+
+            let near_charm = if let Some((local_x, local_y)) = cursor {
                 let radius = if currently_interactive { HIT_RADIUS_EXIT } else { HIT_RADIUS_ENTER };
                 points.iter().any(|(px, py)| {
                     let dx = local_x - px;
@@ -132,6 +185,43 @@ fn start_hit_test_loop(app: tauri::AppHandle, state: SharedHitState) {
                 let _ = window.set_ignore_cursor_events(!should_be_interactive);
                 currently_interactive = should_be_interactive;
             }
+
+            if cursor_stream {
+                if let Some((x, y)) = cursor {
+                    let moved = match last_sent {
+                        Some((sx, sy)) => {
+                            let dx = x - sx;
+                            let dy = y - sy;
+                            (dx * dx + dy * dy).sqrt()
+                        }
+                        None => f64::INFINITY,
+                    };
+                    if moved > CURSOR_DEADBAND_PX
+                        && last_emit.elapsed() >= CURSOR_EMIT_MIN_INTERVAL
+                    {
+                        let _ = window.emit("cursor-moved", (x, y));
+                        last_sent = Some((x, y));
+                        last_emit = Instant::now();
+                        pending = false;
+                    } else if moved > 0.5 {
+                        pending = true;
+                    }
+                    // Trailing settle: movement swallowed by the rate cap or the
+                    // dead-band gets one final emit, so listeners never rest one
+                    // frame short of the cursor's true position.
+                    if pending && last_emit.elapsed() >= CURSOR_SETTLE_INTERVAL {
+                        let _ = window.emit("cursor-moved", (x, y));
+                        last_sent = Some((x, y));
+                        last_emit = Instant::now();
+                        pending = false;
+                    }
+                }
+            } else {
+                // Stream off: forget the last position so re-enabling emits
+                // immediately.
+                last_sent = None;
+                pending = false;
+            }
         }
     });
 }
@@ -141,6 +231,7 @@ pub fn run() {
     let hit_state: SharedHitState = Arc::new(Mutex::new(HitState {
         points: Vec::new(),
         force_interactive: false,
+        cursor_stream: false,
     }));
 
     tauri::Builder::default()
@@ -160,6 +251,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             update_hit_points,
             set_force_interactive,
+            set_cursor_stream,
             get_stage_size
         ])
         .setup(move |app| {
@@ -171,6 +263,7 @@ pub fn run() {
             cover_primary_monitor(&window);
             let _ = window.set_ignore_cursor_events(true);
             let _ = window.show();
+            apply_macos_overlay_behavior(&window);
 
             start_hit_test_loop(app.handle().clone(), hit_state.clone());
 

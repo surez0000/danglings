@@ -527,3 +527,130 @@ body,
   max-width: 130px;
   accent-color: var(--gold);
 }
+
+/* ---- bird companion ---- */
+
+.bird-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.bird-hit,
+.seat-hit {
+  position: absolute;
+  left: 0;
+  top: 0;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.chirp-note {
+  position: absolute;
+  pointer-events: none;
+  font-size: 15px;
+  color: #d2a24c;
+  text-shadow: 0 1px 2px rgba(20, 16, 12, 0.6);
+  animation: chirp-float 0.9s ease-out forwards;
+}
+
+@keyframes chirp-float {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -26px) scale(1.15);
+  }
+}
+
+.companion-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.companion-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: var(--ink-2);
+  border: 1px solid rgba(241, 231, 208, 0.08);
+  border-radius: 12px;
+  padding: 12px 10px 10px;
+  cursor: pointer;
+  text-align: center;
+  font-family: var(--serif);
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.companion-card:hover {
+  background: rgba(210, 162, 76, 0.08);
+  border-color: rgba(210, 162, 76, 0.3);
+  transform: translateY(-1px);
+}
+
+.companion-card.active {
+  border-color: var(--gold);
+  background: rgba(210, 162, 76, 0.12);
+}
+
+.companion-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+}
+
+.companion-emoji {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.companion-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--parchment);
+  letter-spacing: 0.01em;
+}
+
+.companion-desc {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  line-height: 1.4;
+  color: var(--parchment-dim);
+}
+
+.companion-card.active .companion-name,
+.companion-card.active .companion-desc {
+  color: var(--parchment);
+}
+
+.companion-action {
+  margin-top: auto;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--gold);
+  border: 1px solid rgba(210, 162, 76, 0.5);
+  border-radius: 999px;
+  padding: 3px 10px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.companion-card:hover .companion-action,
+.companion-card.active .companion-action {
+  background: var(--gold);
+  color: #1c1712;
+}
