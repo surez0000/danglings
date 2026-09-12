@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local 3D source exports (too large for git; runtime assets get compressed into src/assets)
+3ds/

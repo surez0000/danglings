@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128@2x.png" width="96" alt="DeskCharm icon" />
+<img src="src-tauri/icons/128x128@2x.png" width="96" alt="Danglings icon" />
 
-# DeskCharm
+# Danglings
 
-**A tiny lucky charm that lives on your desktop.**
+**Tiny lucky charms that dangle from the top of your screen.**
 
 It hangs from a thread at the top of your screen, sways with a little wind, and reacts when you click it. Pick a charm rooted in a real tradition — or hang your own emoji instead.
 
@@ -14,7 +14,7 @@ It hangs from a thread at the top of your screen, sways with a little wind, and 
 
 ## What it is
 
-DeskCharm is a transparent, always-on-top desktop overlay. A single charm hangs on a swinging, physically-simulated thread — drag it, flick it, or just let it sway. Click it to trigger its **ritual** (a small animation + sound), or right-click to open the picker and choose a different charm.
+Danglings is a transparent, always-on-top desktop overlay. A single charm hangs on a swinging, physically-simulated thread — drag it, flick it, or just let it sway. Click it to trigger its **ritual** (a small animation + sound), or right-click to open the picker and choose a different charm.
 
 - 🧿 **Nazar Boncuğu** (Turkey & the Levant) — spin it to ward off the evil eye
 - 🪬 **Hamsa** (Middle East & North Africa) — flick it away for good fortune
@@ -51,7 +51,7 @@ npm run tauri build
 
 ## Contributing
 
-Issues and PRs are welcome — new charms, new rituals, and bug fixes especially. `main` is protected, so all changes go through a pull request.
+Issues and PRs are welcome — new charms, new rituals, and bug fixes especially.
 
 ## License
 

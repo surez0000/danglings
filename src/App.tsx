@@ -13,9 +13,27 @@ const ANCHOR_Y = 8;
 const CHARM_INDEX = 6;
 const MARGIN = 26;
 
+export type CharmSize = "small" | "medium" | "large";
+
+const SIZE_PX: Record<CharmSize, number> = { small: 24, medium: 40, large: 56 };
+
+type Settings = {
+  size: CharmSize;
+  windEnabled: boolean;
+  windIntensity: number;
+  anchorRatio: number;
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  size: "small",
+  windEnabled: true,
+  windIntensity: 1,
+  anchorRatio: 0.5,
+};
+
 function loadCharm(): Charm {
   try {
-    const saved = localStorage.getItem("deskcharm.charm");
+    const saved = localStorage.getItem("danglings.charm");
     if (saved) return JSON.parse(saved);
   } catch {
     // ignore corrupt storage
@@ -23,10 +41,21 @@ function loadCharm(): Charm {
   return DEFAULT_CHARMS[0];
 }
 
+function loadSettings(): Settings {
+  try {
+    const saved = localStorage.getItem("danglings.settings");
+    if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+  } catch {
+    // ignore corrupt storage
+  }
+  return DEFAULT_SETTINGS;
+}
+
 export default function App() {
   const [stage, setStage] = useState<{ width: number; height: number } | null>(null);
   const [anchorX, setAnchorX] = useState(400);
   const [charm, setCharm] = useState<Charm>(loadCharm);
+  const [settings, setSettings] = useState<Settings>(loadSettings);
   const [menuOpen, setMenuOpen] = useState(false);
   const [customEmoji, setCustomEmoji] = useState("");
   const [activeRitual, setActiveRitual] = useState<RitualType | null>(null);
@@ -36,6 +65,7 @@ export default function App() {
 
   const pointsRef = useRef<RopePoint[]>(createRope(anchorX, ANCHOR_Y));
   const anchorXRef = useRef(anchorX);
+  const settingsRef = useRef(settings);
   const dragIndexRef = useRef<number | null>(null);
   const dragPosRef = useRef<{ x: number; y: number } | null>(null);
   const anchorDraggingRef = useRef(false);
@@ -43,9 +73,16 @@ export default function App() {
   const timeRef = useRef(0);
   const frameCountRef = useRef(0);
 
+  const sizePx = SIZE_PX[settings.size];
+
+  useEffect(() => {
+    settingsRef.current = settings;
+    localStorage.setItem("danglings.settings", JSON.stringify(settings));
+  }, [settings]);
+
   useEffect(() => {
     invoke<[number, number]>("get_stage_size").then(([w, h]) => {
-      const x = w / 2;
+      const x = Math.min(Math.max(settingsRef.current.anchorRatio * w, MARGIN), w - MARGIN);
       anchorXRef.current = x;
       setAnchorX(x);
       pointsRef.current = createRope(x, ANCHOR_Y);
@@ -54,7 +91,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("deskcharm.charm", JSON.stringify(charm));
+    localStorage.setItem("danglings.charm", JSON.stringify(charm));
   }, [charm]);
 
   useEffect(() => {
@@ -64,7 +101,8 @@ export default function App() {
     const tick = () => {
       timeRef.current += 1;
       frameCountRef.current += 1;
-      const wind = Math.sin(timeRef.current * 0.02) * 0.06;
+      const { windEnabled, windIntensity, size } = settingsRef.current;
+      const wind = windEnabled ? Math.sin(timeRef.current * 0.02) * 0.06 * windIntensity : 0;
       stepRope(pointsRef.current, anchorXRef.current, ANCHOR_Y, wind, dragIndexRef.current, dragPosRef.current, bounds);
       const tip = pointsRef.current[CHARM_INDEX];
       setCharmPos({ x: tip.x, y: tip.y });
@@ -74,12 +112,9 @@ export default function App() {
       setTilt(swingTilt);
 
       if (frameCountRef.current % 2 === 0) {
-        invoke("update_hit_points", {
-          points: [
-            [tip.x, tip.y],
-            [anchorXRef.current, ANCHOR_Y],
-          ],
-        }).catch(() => {});
+        const points = pointsRef.current.map((p) => [p.x, p.y] as [number, number]);
+        points.push([tip.x, tip.y + SIZE_PX[size] / 2]);
+        invoke("update_hit_points", { points }).catch(() => {});
       }
       raf = requestAnimationFrame(tick);
     };
@@ -93,6 +128,7 @@ export default function App() {
       const x = stage.width / 2;
       anchorXRef.current = x;
       setAnchorX(x);
+      setSettings((s) => ({ ...s, anchorRatio: 0.5 }));
     });
     return () => {
       unlisten.then((f) => f());
@@ -119,7 +155,7 @@ export default function App() {
       return;
     }
     const dx = e.clientX - charmPos.x;
-    const dy = e.clientY - charmPos.y;
+    const dy = e.clientY - (charmPos.y + sizePx / 2);
     const dist = Math.hypot(dx, dy) || 1;
     const pull = Math.min(dist / 60, 1) * 7;
     setLean({ x: -(dx / dist) * pull, y: -(dy / dist) * pull * 0.4 });
@@ -175,6 +211,9 @@ export default function App() {
   const onAnchorPointerUp = () => {
     anchorDraggingRef.current = false;
     setForceInteractive(false);
+    if (stage) {
+      setSettings((s) => ({ ...s, anchorRatio: anchorXRef.current / stage.width }));
+    }
   };
 
   const chooseCharm = (c: Charm) => {
@@ -209,6 +248,7 @@ export default function App() {
 
   const rope = pointsRef.current;
   const points = rope.map((p) => `${p.x},${p.y}`).join(" ");
+  const charmCenterY = charmPos.y + sizePx / 2;
 
   return (
     <div
@@ -219,6 +259,8 @@ export default function App() {
       <svg className="thread" width={stage.width} height={stage.height}>
         <polyline points={points} fill="none" stroke="rgba(20,16,12,0.55)" strokeWidth={3.2} strokeLinecap="round" />
         <polyline points={points} fill="none" stroke="rgba(255,250,240,0.85)" strokeWidth={1.1} strokeLinecap="round" />
+        <circle cx={charmPos.x} cy={charmPos.y} r={2.6} fill="rgba(20,16,12,0.8)" />
+        <circle cx={charmPos.x} cy={charmPos.y} r={1.2} fill="rgba(255,250,240,0.9)" />
       </svg>
 
       <div
@@ -231,14 +273,14 @@ export default function App() {
       />
 
       {activeRitual === "sparkle" && (
-        <div className="sparkle-burst" style={{ left: charmPos.x, top: charmPos.y }}>
+        <div className="sparkle-burst" style={{ left: charmPos.x, top: charmCenterY }}>
           {Array.from({ length: 6 }).map((_, i) => (
             <span key={i} className="spark" style={{ "--i": i } as React.CSSProperties} />
           ))}
         </div>
       )}
       {activeRitual === "chime" && (
-        <div className="chime-rings" style={{ left: charmPos.x, top: charmPos.y }}>
+        <div className="chime-rings" style={{ left: charmPos.x, top: charmCenterY }}>
           <span className="ring" />
           <span className="ring ring-delay" />
         </div>
@@ -250,7 +292,7 @@ export default function App() {
         style={{
           left: charmPos.x,
           top: charmPos.y,
-          transform: `translate(-50%, -50%) translate(${lean.x}px, ${lean.y}px) rotateZ(${(tilt + lean.x * 0.6).toFixed(2)}deg) rotateY(${(tilt * 1.3).toFixed(2)}deg)`,
+          transform: `translate(-50%, -2px) translate(${lean.x}px, ${lean.y}px) rotateZ(${(tilt + lean.x * 0.6).toFixed(2)}deg) rotateY(${(tilt * 1.3).toFixed(2)}deg)`,
         }}
         onPointerDown={onCharmPointerDown}
         onPointerMove={onCharmPointerMove}
@@ -260,7 +302,7 @@ export default function App() {
         title={`${charm.name} — click for a ritual, right-click to change`}
       >
         <span className={`charm-inner ${activeRitual ? `ritual-${activeRitual}` : "idle"}`}>
-          <CharmGlyph charm={charm} size={40} />
+          <CharmGlyph charm={charm} size={sizePx} />
         </span>
       </div>
 
@@ -269,7 +311,7 @@ export default function App() {
           className="menu"
           style={{
             left: Math.min(Math.max(charmPos.x - 145, 12), stage.width - 302),
-            top: charmPos.y + 34,
+            top: charmPos.y + sizePx + 18,
           }}
           onPointerDown={(e) => e.stopPropagation()}
         >
@@ -309,6 +351,47 @@ export default function App() {
             <button className="menu-set" onClick={applyCustomEmoji}>
               Set
             </button>
+          </div>
+          <div className="menu-divider" />
+          <p className="menu-label">settings</p>
+          <div className="menu-settings">
+            <div className="setting-row">
+              <span className="setting-name">Size</span>
+              <div className="size-options">
+                {(Object.keys(SIZE_PX) as CharmSize[]).map((s) => (
+                  <button
+                    key={s}
+                    className={`size-btn ${settings.size === s ? "active" : ""}`}
+                    title={s}
+                    onClick={() => setSettings((prev) => ({ ...prev, size: s }))}
+                  >
+                    {s.charAt(0).toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-row">
+              <span className="setting-name">Idle sway</span>
+              <button
+                className={`toggle ${settings.windEnabled ? "on" : ""}`}
+                aria-pressed={settings.windEnabled}
+                onClick={() => setSettings((prev) => ({ ...prev, windEnabled: !prev.windEnabled }))}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </div>
+            <div className={`setting-row ${settings.windEnabled ? "" : "dimmed"}`}>
+              <span className="setting-name">Sway strength</span>
+              <input
+                type="range"
+                min={0.2}
+                max={2}
+                step={0.1}
+                value={settings.windIntensity}
+                disabled={!settings.windEnabled}
+                onChange={(e) => setSettings((prev) => ({ ...prev, windIntensity: Number(e.target.value) }))}
+              />
+            </div>
           </div>
         </div>
       )}

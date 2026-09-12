@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DeskCharm",
+  "productName": "Danglings",
   "version": "0.1.0",
-  "identifier": "com.sreen.deskcharm",
+  "identifier": "com.danglings.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "DeskCharm",
+        "title": "Danglings",
         "width": 800,
         "height": 600,
         "resizable": false,

@@ -7,7 +7,9 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager, WebviewWindow};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+#[cfg(target_os = "windows")]
 use windows::Win32::Foundation::POINT;
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 const HIT_RADIUS_ENTER: f64 = 42.0;
@@ -42,15 +44,37 @@ fn get_stage_size(window: WebviewWindow) -> (f64, f64) {
     (1280.0, 800.0)
 }
 
-fn get_cursor_pos_physical() -> Option<(f64, f64)> {
+// Global cursor position converted to the window's logical coordinate space.
+// Windows reports physical pixels; macOS CGEvent reports logical points — both
+// are normalized here so the hit-test loop is platform-agnostic.
+#[cfg(target_os = "windows")]
+fn cursor_local(window_pos: (f64, f64), scale: f64) -> Option<(f64, f64)> {
     unsafe {
         let mut point = POINT::default();
         if GetCursorPos(&mut point).is_ok() {
-            Some((point.x as f64, point.y as f64))
+            Some((
+                (point.x as f64 - window_pos.0) / scale,
+                (point.y as f64 - window_pos.1) / scale,
+            ))
         } else {
             None
         }
     }
+}
+
+#[cfg(target_os = "macos")]
+fn cursor_local(window_pos: (f64, f64), scale: f64) -> Option<(f64, f64)> {
+    use core_graphics::event::CGEvent;
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+    let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).ok()?;
+    let event = CGEvent::new(source).ok()?;
+    let point = event.location();
+    Some((point.x - window_pos.0 / scale, point.y - window_pos.1 / scale))
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn cursor_local(_window_pos: (f64, f64), _scale: f64) -> Option<(f64, f64)> {
+    None
 }
 
 fn cover_primary_monitor(window: &WebviewWindow) {
@@ -92,9 +116,7 @@ fn start_hit_test_loop(app: tauri::AppHandle, state: SharedHitState) {
                 (s.force_interactive, s.points.clone())
             };
 
-            let near_charm = if let Some((cx, cy)) = get_cursor_pos_physical() {
-                let local_x = (cx - window_pos.0) / scale;
-                let local_y = (cy - window_pos.1) / scale;
+            let near_charm = if let Some((local_x, local_y)) = cursor_local(window_pos, scale) {
                 let radius = if currently_interactive { HIT_RADIUS_EXIT } else { HIT_RADIUS_ENTER };
                 points.iter().any(|(px, py)| {
                     let dx = local_x - px;
@@ -141,6 +163,10 @@ pub fn run() {
             get_stage_size
         ])
         .setup(move |app| {
+            // Overlay app: no Dock icon, never steals focus on launch.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             let window = app.get_webview_window("main").expect("main window must exist");
             cover_primary_monitor(&window);
             let _ = window.set_ignore_cursor_events(true);
@@ -160,7 +186,7 @@ pub fn run() {
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .tooltip("DeskCharm — Shift+Alt+K to show/hide")
+                .tooltip("Danglings — Shift+Alt+K to show/hide")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "toggle" => {
                         if let Some(window) = app.get_webview_window("main") {

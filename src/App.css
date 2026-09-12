@@ -34,11 +34,12 @@ body,
 
 .charm {
   position: absolute;
-  font-size: 40px;
   line-height: 1;
   cursor: pointer;
   touch-action: none;
   transform-style: preserve-3d;
+  /* Swing around the knot where the thread ties on, not the glyph center. */
+  transform-origin: 50% 0;
 }
 
 .charm-inner {
@@ -437,4 +438,92 @@ body,
 
 .menu-set:hover {
   filter: brightness(1.1);
+}
+
+.menu-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.setting-row.dimmed {
+  opacity: 0.45;
+}
+
+.setting-name {
+  font-size: 0.68rem;
+  color: var(--parchment);
+}
+
+.size-options {
+  display: flex;
+  gap: 4px;
+}
+
+.size-btn {
+  width: 28px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--ink-2);
+  color: var(--parchment-dim);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.size-btn:hover {
+  border-color: rgba(210, 162, 76, 0.4);
+}
+
+.size-btn.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #1c1712;
+}
+
+.toggle {
+  width: 36px;
+  height: 20px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--ink-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.toggle-knob {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--parchment-dim);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.toggle.on {
+  background: rgba(210, 162, 76, 0.25);
+  border-color: var(--gold);
+}
+
+.toggle.on .toggle-knob {
+  transform: translateX(16px);
+  background: var(--gold);
+}
+
+.setting-row input[type="range"] {
+  flex: 1;
+  max-width: 130px;
+  accent-color: var(--gold);
 }
