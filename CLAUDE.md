@@ -28,9 +28,12 @@ that is click-through except near the charm. Tray menu + Shift+Alt+K toggle.
     motion knobs (yawClamp/pitchMul/bobMul/focusFrac), `companionSpec(def, size)` deriving
     modelPx/canvas dims/rig lengths, and the loop/battery constants. Adding a companion =
     one optimized GLB in public/companions/ + one registry entry. A companion may declare
-    `variants` (color variants: same character, different GLB — monkey ×3, elephant ×4);
-    the picker card shows a swatch dot per variant and the selection persists as
-    `{kind:'companion', id, variantId?}`.
+    `variants` (color variants — monkey ×3, elephant ×4): ONE model file per family plus a
+    ~90KB texture set ("skin": base/normal/mr webp under public/companions/skins/,
+    extracted from a variant GLB via scripts/extract-skin.mjs). At runtime a variant switch
+    swaps the material's texture maps on the already-loaded mesh (sRGB + flipY=false
+    handled in birdScene) — no mesh reload. Picker cards show a swatch dot per variant;
+    selection persists as `{kind:'companion', id, variantId?}`.
   - `companionStore.ts` — load/save `danglings.companion`.
   - `useCursorFeed.ts` — module singleton `cursorState` fed by the Rust `cursor-moved` event;
     `startCursorFeed(onWake)` opts in via `set_cursor_stream`, disposer opts out.

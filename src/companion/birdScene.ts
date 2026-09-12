@@ -22,7 +22,14 @@ import {
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { DPR_CAP, HANG_ANCHOR_FRAC, SEAT_ANCHOR_FRAC, type CompanionAttach } from "./types";
+import { MeshStandardMaterial, TextureLoader } from "three";
+import {
+  DPR_CAP,
+  HANG_ANCHOR_FRAC,
+  SEAT_ANCHOR_FRAC,
+  type CompanionAttach,
+  type SkinUrls,
+} from "./types";
 import type { BirdPose } from "./birdBehavior";
 
 export type { BirdPose };
@@ -36,6 +43,9 @@ export type SceneDims = { canvasW: number; canvasH: number; modelPx: number };
 export type CompanionSceneOpts = SceneDims & {
   url: string;
   attach: CompanionAttach;
+  /* Texture set overriding the model's built-in maps (same-geometry color
+     variants). Absent = the model's own textures. */
+  skin?: SkinUrls;
 };
 
 /* Per-frame bone targets for rigged models — final angles in radians, computed
@@ -141,6 +151,7 @@ function detectRig(model: Object3D): Rig | null {
 
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
+const textureLoader = new TextureLoader();
 
 function buildRenderer(canvas: HTMLCanvasElement, w: number, h: number, dpr: number): WebGLRenderer {
   const renderer = new WebGLRenderer({
@@ -252,7 +263,67 @@ export async function createBirdScene(canvas: HTMLCanvasElement): Promise<BirdSc
   const birdGroup = new Group();
   scene.add(birdGroup);
   let currentModel: Object3D | null = null;
+  let currentUrl = "";
   let rig: Rig | null = null;
+
+  /* Skin support: remember the model's built-in maps so a skinless variant can
+     restore them, and track loaded skin textures for disposal. All texture
+     slots stay non-null across swaps, so no shader recompiles. */
+  type DefaultMaps = {
+    mat: MeshStandardMaterial;
+    map: MeshStandardMaterial["map"];
+    normalMap: MeshStandardMaterial["normalMap"];
+    metalnessMap: MeshStandardMaterial["metalnessMap"];
+    roughnessMap: MeshStandardMaterial["roughnessMap"];
+  };
+  let defaultMaps: DefaultMaps[] = [];
+  let skinTextures: Texture[] = [];
+
+  const collectDefaultMaps = (root: Object3D) => {
+    const mats = new Set<MeshStandardMaterial>();
+    root.traverse((o) => {
+      if (o instanceof Mesh) {
+        const m = o.material as Material | Material[];
+        for (const mm of Array.isArray(m) ? m : [m]) {
+          if (mm instanceof MeshStandardMaterial) mats.add(mm);
+        }
+      }
+    });
+    defaultMaps = [...mats].map((mat) => ({
+      mat,
+      map: mat.map,
+      normalMap: mat.normalMap,
+      metalnessMap: mat.metalnessMap,
+      roughnessMap: mat.roughnessMap,
+    }));
+  };
+
+  const disposeSkin = () => {
+    for (const t of skinTextures) t.dispose();
+    skinTextures = [];
+  };
+
+  const restoreDefaultMaps = () => {
+    for (const d of defaultMaps) {
+      d.mat.map = d.map;
+      d.mat.normalMap = d.normalMap;
+      d.mat.metalnessMap = d.metalnessMap;
+      d.mat.roughnessMap = d.roughnessMap;
+    }
+  };
+
+  const loadSkinTexture = async (url: string, srgb: boolean) => {
+    const t = await textureLoader.loadAsync(url);
+    // glTF UV convention; wrap copied from the model's own base map.
+    t.flipY = false;
+    if (srgb) t.colorSpace = SRGBColorSpace;
+    const ref = defaultMaps[0]?.map;
+    if (ref) {
+      t.wrapS = ref.wrapS;
+      t.wrapT = ref.wrapT;
+    }
+    return t;
+  };
   let pose: BirdPose = { yaw: 0, pitch: 0, roll: 0, offsetY: 0, scaleX: 1, scaleY: 1 };
   let rigPose: RigPose | null = null;
 
@@ -313,6 +384,38 @@ export async function createBirdScene(canvas: HTMLCanvasElement): Promise<BirdSc
   return {
     async configure(opts: CompanionSceneOpts) {
       const token = ++configureToken;
+
+      // Same-geometry fast path (color variants): only the texture set swaps —
+      // no mesh fetch, no meshopt decode, no geometry re-upload.
+      if (currentModel && opts.url === currentUrl) {
+        if (opts.skin) {
+          const [base, normal, mr] = await Promise.all([
+            loadSkinTexture(opts.skin.base, true),
+            loadSkinTexture(opts.skin.normal, false),
+            loadSkinTexture(opts.skin.mr, false),
+          ]);
+          if (disposed || token !== configureToken) {
+            base.dispose();
+            normal.dispose();
+            mr.dispose();
+            return;
+          }
+          disposeSkin();
+          skinTextures = [base, normal, mr];
+          for (const d of defaultMaps) {
+            d.mat.map = base;
+            d.mat.normalMap = normal;
+            d.mat.metalnessMap = mr;
+            d.mat.roughnessMap = mr;
+          }
+        } else {
+          disposeSkin();
+          restoreDefaultMaps();
+        }
+        renderer.render(scene, camera);
+        return;
+      }
+
       await MeshoptDecoder.ready;
       const gltf = await loader.loadAsync(opts.url);
       if (disposed || token !== configureToken) {
@@ -352,10 +455,34 @@ export async function createBirdScene(canvas: HTMLCanvasElement): Promise<BirdSc
         birdGroup.remove(currentModel);
         disposeRoot(currentModel);
       }
+      disposeSkin();
       currentModel = model;
+      currentUrl = opts.url;
       rig = nextRig;
       rigPose = null;
       birdGroup.add(model);
+      collectDefaultMaps(model);
+
+      if (opts.skin) {
+        const [base, normal, mr] = await Promise.all([
+          loadSkinTexture(opts.skin.base, true),
+          loadSkinTexture(opts.skin.normal, false),
+          loadSkinTexture(opts.skin.mr, false),
+        ]);
+        if (disposed || token !== configureToken) {
+          base.dispose();
+          normal.dispose();
+          mr.dispose();
+          return;
+        }
+        skinTextures = [base, normal, mr];
+        for (const d of defaultMaps) {
+          d.mat.map = base;
+          d.mat.normalMap = normal;
+          d.mat.metalnessMap = mr;
+          d.mat.roughnessMap = mr;
+        }
+      }
 
       dims = { canvasW: opts.canvasW, canvasH: opts.canvasH, modelPx: opts.modelPx };
       renderer.setSize(dims.canvasW, dims.canvasH, false);
@@ -386,6 +513,7 @@ export async function createBirdScene(canvas: HTMLCanvasElement): Promise<BirdSc
       configureToken++;
       canvas.removeEventListener("webglcontextlost", onContextLost);
       canvas.removeEventListener("webglcontextrestored", onContextRestored);
+      disposeSkin();
       if (currentModel) disposeRoot(currentModel);
       envTexture?.dispose();
       renderer.dispose();
