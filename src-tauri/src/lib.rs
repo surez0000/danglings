@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -14,6 +15,13 @@ use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 const HIT_RADIUS_ENTER: f64 = 42.0;
 const HIT_RADIUS_EXIT: f64 = 58.0;
+
+// Menu-bar inset of the primary display in logical px (f64 bits), computed on
+// the main thread during setup — NSScreen is main-thread-only. The overlay
+// window covers the strip UNDER the macOS menu bar, which always draws above a
+// floating window, so anything anchored inside the top inset would be hidden;
+// the frontend hangs everything from below it. 0 on other platforms.
+static TOP_INSET_BITS: AtomicU64 = AtomicU64::new(0);
 
 const CURSOR_DEADBAND_PX: f64 = 2.0;
 const CURSOR_EMIT_MIN_INTERVAL: Duration = Duration::from_millis(33);
@@ -46,13 +54,14 @@ fn set_cursor_stream(state: tauri::State<SharedHitState>, active: bool) {
 }
 
 #[tauri::command]
-fn get_stage_size(window: WebviewWindow) -> (f64, f64) {
+fn get_stage_size(window: WebviewWindow) -> (f64, f64, f64) {
+    let inset = f64::from_bits(TOP_INSET_BITS.load(Ordering::Relaxed));
     if let Ok(Some(monitor)) = window.current_monitor() {
         let scale = monitor.scale_factor();
         let size = monitor.size();
-        return (size.width as f64 / scale, size.height as f64 / scale);
+        return (size.width as f64 / scale, size.height as f64 / scale, inset);
     }
-    (1280.0, 800.0)
+    (1280.0, 800.0, inset)
 }
 
 // Global cursor position converted to the window's logical coordinate space.
@@ -258,6 +267,21 @@ pub fn run() {
             // Overlay app: no Dock icon, never steals focus on launch.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // setup runs on the main thread — safe to read NSScreen here.
+            #[cfg(target_os = "macos")]
+            {
+                use objc2_app_kit::NSScreen;
+                if let Some(mtm) = objc2::MainThreadMarker::new() {
+                    if let Some(screen) = NSScreen::mainScreen(mtm) {
+                        let frame = screen.frame();
+                        let visible = screen.visibleFrame();
+                        let inset = (frame.origin.y + frame.size.height)
+                            - (visible.origin.y + visible.size.height);
+                        TOP_INSET_BITS.store(inset.max(0.0).to_bits(), Ordering::Relaxed);
+                    }
+                }
+            }
 
             let window = app.get_webview_window("main").expect("main window must exist");
             cover_primary_monitor(&window);

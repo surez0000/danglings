@@ -16,6 +16,9 @@ const BirdCompanion = lazy(() => import("./companion/BirdCompanion"));
 
 const MAX_TILT_DEG = 22;
 
+/* Fallback until get_stage_size reports the real top inset: on macOS the
+   overlay window extends under the menu bar (which always draws above it), so
+   everything hangs from below that hidden strip. */
 const ANCHOR_Y = 0;
 const CHARM_INDEX = 6;
 const MARGIN = 26;
@@ -61,6 +64,7 @@ function loadSettings(): Settings {
 export default function App() {
   const [stage, setStage] = useState<{ width: number; height: number } | null>(null);
   const [anchorX, setAnchorX] = useState(400);
+  const [anchorY, setAnchorY] = useState(ANCHOR_Y);
   const [charm, setCharm] = useState<Charm>(loadCharm);
   const [companion, setCompanion] = useState<CompanionSelection>(loadCompanion);
   const [settings, setSettings] = useState<Settings>(loadSettings);
@@ -99,11 +103,12 @@ export default function App() {
   }, [menuOpen, moving]);
 
   useEffect(() => {
-    invoke<[number, number]>("get_stage_size").then(([w, h]) => {
+    invoke<[number, number, number]>("get_stage_size").then(([w, h, topInset]) => {
       const x = Math.min(Math.max(settingsRef.current.anchorRatio * w, MARGIN), w - MARGIN);
       anchorXRef.current = x;
       setAnchorX(x);
-      pointsRef.current = createRope(x, ANCHOR_Y);
+      setAnchorY(topInset);
+      pointsRef.current = createRope(x, topInset);
       setStage({ width: w, height: h });
     });
   }, []);
@@ -132,7 +137,7 @@ export default function App() {
       frameCountRef.current += 1;
       const { windEnabled, windIntensity, size } = settingsRef.current;
       const wind = windEnabled ? Math.sin(timeRef.current * 0.02) * 0.06 * windIntensity : 0;
-      stepRope(pointsRef.current, anchorXRef.current, ANCHOR_Y, wind, dragIndexRef.current, dragPosRef.current, bounds);
+      stepRope(pointsRef.current, anchorXRef.current, anchorY, wind, dragIndexRef.current, dragPosRef.current, bounds);
       const tip = pointsRef.current[CHARM_INDEX];
       setCharmPos({ x: tip.x, y: tip.y });
 
@@ -149,7 +154,7 @@ export default function App() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [stage, companion.kind]);
+  }, [stage, anchorY, companion.kind]);
 
   useEffect(() => {
     const unlisten = listen("recenter", () => {
@@ -341,7 +346,7 @@ export default function App() {
 
       <div
         className="anchor-handle"
-        style={{ left: anchorX, top: ANCHOR_Y }}
+        style={{ left: anchorX, top: anchorY }}
         onPointerDown={onAnchorPointerDown}
         onPointerMove={onAnchorPointerMove}
         onPointerUp={onAnchorPointerUp}
@@ -389,7 +394,7 @@ export default function App() {
           <BirdCompanion
             stage={stage}
             anchorX={anchorX}
-            anchorY={ANCHOR_Y}
+            anchorY={anchorY}
             companionId={companion.id}
             size={settings.size}
             paused={menuOpen}
@@ -407,7 +412,7 @@ export default function App() {
 
       {moving && (
         <div className="move-capture" onPointerMove={onMoveMove} onPointerDown={onMoveConfirm}>
-          <div className="move-marker" style={{ left: anchorX }}>
+          <div className="move-marker" style={{ left: anchorX, top: anchorY }}>
             <span className="move-bead" />
             <span className="move-hint">click to place</span>
           </div>
