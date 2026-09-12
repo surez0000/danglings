@@ -16,7 +16,7 @@ const BirdCompanion = lazy(() => import("./companion/BirdCompanion"));
 
 const MAX_TILT_DEG = 22;
 
-const ANCHOR_Y = 8;
+const ANCHOR_Y = 0;
 const CHARM_INDEX = 6;
 const MARGIN = 26;
 
@@ -78,6 +78,7 @@ export default function App() {
   const dragIndexRef = useRef<number | null>(null);
   const dragPosRef = useRef<{ x: number; y: number } | null>(null);
   const anchorDraggingRef = useRef(false);
+  const menuOpenRef = useRef(false);
   const downRef = useRef<{ x: number; y: number } | null>(null);
   const timeRef = useRef(0);
   const frameCountRef = useRef(0);
@@ -88,6 +89,13 @@ export default function App() {
     settingsRef.current = settings;
     localStorage.setItem("danglings.settings", JSON.stringify(settings));
   }, [settings]);
+
+  // The menu must keep the window interactive for its whole (tall) area, no
+  // matter what the pointer handlers that opened/closed it did around it.
+  useEffect(() => {
+    menuOpenRef.current = menuOpen;
+    invoke("set_force_interactive", { active: menuOpen }).catch(() => {});
+  }, [menuOpen]);
 
   useEffect(() => {
     invoke<[number, number]>("get_stage_size").then(([w, h]) => {
@@ -113,6 +121,12 @@ export default function App() {
     let raf = 0;
     const bounds = { width: stage.width, height: stage.height, margin: MARGIN };
     const tick = () => {
+      // Freeze the physics while the picker is open — selecting a card on a
+      // swinging target is miserable, and the menu is anchored to the charm.
+      if (menuOpenRef.current) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
       timeRef.current += 1;
       frameCountRef.current += 1;
       const { windEnabled, windIntensity, size } = settingsRef.current;
@@ -154,6 +168,10 @@ export default function App() {
   };
 
   const onCharmPointerDown = (e: React.PointerEvent) => {
+    // Only the left button drags — a right-click must not start a drag, and its
+    // release must not reset force-interactive while the menu it opened is up
+    // (that made the window click-through and sent clicks to the app behind).
+    if (e.button !== 0) return;
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
     dragIndexRef.current = CHARM_INDEX;
@@ -186,6 +204,7 @@ export default function App() {
   };
 
   const onCharmPointerUp = (e: React.PointerEvent) => {
+    if (dragIndexRef.current === null) return;
     dragIndexRef.current = null;
     dragPosRef.current = null;
     setForceInteractive(false);
@@ -276,8 +295,12 @@ export default function App() {
   // onRequestMenu (already offset below the model); charm mode keeps the
   // existing charm math.
   const menuAnchorX = birdMode && menuPos ? menuPos.x : charmPos.x;
-  const menuTop = birdMode && menuPos ? menuPos.y : charmPos.y + sizePx + 18;
+  const menuTopRaw = birdMode && menuPos ? menuPos.y : charmPos.y + sizePx + 18;
   const menuLeft = Math.min(Math.max(menuAnchorX - 145, 12), stage.width - 302);
+  // The menu scrolls within a capped height and always fits on screen (32 =
+  // .menu vertical padding, content-box).
+  const menuMaxH = Math.min(640, Math.round(stage.height * 0.8));
+  const menuTop = Math.max(12, Math.min(menuTopRaw, stage.height - menuMaxH - 48));
 
   return (
     <div
@@ -347,6 +370,7 @@ export default function App() {
             anchorY={ANCHOR_Y}
             companionId={companion.id}
             size={settings.size}
+            paused={menuOpen}
             windEnabled={settings.windEnabled}
             windIntensity={settings.windIntensity}
             onRequestMenu={(x, y) => {
@@ -365,6 +389,7 @@ export default function App() {
           style={{
             left: menuLeft,
             top: menuTop,
+            maxHeight: menuMaxH,
           }}
           onPointerDown={(e) => e.stopPropagation()}
         >

@@ -8,6 +8,21 @@ body,
   background: transparent;
   overflow: hidden;
   user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Nothing in the overlay is text to select or an image to drag — WebKit
+   otherwise lets the charm emoji be selected/dragged like page content. */
+.stage,
+.stage * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+.stage input {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .stage {
@@ -233,6 +248,20 @@ body,
   font-family: var(--mono);
   color: var(--parchment);
   animation: menu-in 0.16s ease-out;
+  /* One scroll context for the whole menu; max-height comes from App.tsx. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(210, 162, 76, 0.4) transparent;
+}
+
+.menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.menu::-webkit-scrollbar-thumb {
+  background: rgba(210, 162, 76, 0.35);
+  border-radius: 6px;
 }
 
 .menu-arrow {
@@ -266,26 +295,13 @@ body,
   color: var(--parchment-dim);
 }
 
+/* The menu itself scrolls, so the roster no longer nests a second scrollbar. */
 .roster {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: min(58vh, 460px);
-  overflow-y: auto;
-  overflow-x: hidden;
   margin: 0 -4px;
   padding: 2px 4px 2px 2px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(210, 162, 76, 0.4) transparent;
-}
-
-.roster::-webkit-scrollbar {
-  width: 6px;
-}
-
-.roster::-webkit-scrollbar-thumb {
-  background: rgba(210, 162, 76, 0.35);
-  border-radius: 6px;
 }
 
 .roster-card {

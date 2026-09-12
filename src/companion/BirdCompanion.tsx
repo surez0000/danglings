@@ -33,6 +33,9 @@ export type BirdCompanionProps = {
   anchorY: number;
   companionId: CompanionId;
   size: CharmSize;
+  /* True while the picker menu is open: physics and behavior freeze so nobody
+     has to click a card anchored to a moving target. */
+  paused: boolean;
   windEnabled: boolean;
   windIntensity: number;
   onRequestMenu: (x: number, y: number) => void;
@@ -224,6 +227,11 @@ export default function BirdCompanion(props: BirdCompanionProps) {
   };
 
   const tick = (now: number) => {
+    if (propsRef.current.paused) {
+      lastTickRef.current = now;
+      rafRef.current = requestAnimationFrame(tick);
+      return;
+    }
     const { stage: st, anchorX, anchorY, size: sz, companionId: cid, windEnabled, windIntensity } =
       propsRef.current;
     const d = COMPANION_BY_ID[cid];
@@ -409,10 +417,10 @@ export default function BirdCompanion(props: BirdCompanionProps) {
     ensureLoop();
   }, [size, companionId]);
 
-  // Any anchor/stage/wind-setting change is a wake event.
+  // Any anchor/stage/wind-setting change is a wake event; so is unpausing.
   useEffect(() => {
-    ensureLoop();
-  }, [props.anchorX, stage.width, stage.height, props.windEnabled, props.windIntensity]);
+    if (!props.paused) ensureLoop();
+  }, [props.anchorX, stage.width, stage.height, props.windEnabled, props.windIntensity, props.paused]);
 
   // Lazy-load the three.js chunk; the glyph placeholder swings meanwhile, and
   // stays permanently if WebGL/GLB fail. Re-runs when the companion changes.
