@@ -305,9 +305,14 @@ export default function BirdCompanion(props: BirdCompanionProps) {
 
     const tilt = swingTilt(anchorX, anchorY, seat, s.attach);
 
-    // Render tiers: 60fps while dragging / just released / one-shots, else 30fps.
+    // Render tiers: 60fps while dragging / just released / one-shots / fast
+    // sway (a 30fps tilt against the 60Hz-translated canvas reads as shimmer),
+    // else 30fps.
     const active =
-      dragRef.current !== null || now < releaseUntilRef.current || result.oneShotActive;
+      dragRef.current !== null ||
+      now < releaseUntilRef.current ||
+      result.oneShotActive ||
+      seat.energy > 0.35;
     const interval = active ? RENDER_INTERVAL_ACTIVE_MS : RENDER_INTERVAL_MS;
     const scene = sceneRef.current;
     if (
@@ -463,11 +468,23 @@ export default function BirdCompanion(props: BirdCompanionProps) {
     };
   }, [companionId]);
 
-  // Cursor feed: Rust pushes dead-banded 30Hz events; each one is also the wake.
+  // Cursor feed: Rust pushes dead-banded 30Hz events; each one wakes the LOOP
+  // (the gaze must track) but deliberately not the wind window and not the
+  // physics — otherwise every mouse move gusts the swing, which reads as the
+  // sway "following the pointer".
+  const wakeForGaze = () => {
+    if (hiddenRef.current) return;
+    if (vignetteTimerRef.current !== undefined) {
+      clearTimeout(vignetteTimerRef.current);
+      vignetteTimerRef.current = undefined;
+    }
+    startLoopOnly();
+  };
+
   useEffect(() => {
     let dispose: (() => void) | null = null;
     let dead = false;
-    startCursorFeed(ensureLoop).then((d) => {
+    startCursorFeed(wakeForGaze).then((d) => {
       if (dead) d();
       else dispose = d;
     });

@@ -158,10 +158,12 @@ export type CompanionSizeSpec = {
   anchorFracY: number;
 };
 
+/* Cord length (4 segments) must exceed the model height by ~20px of headroom,
+   or M/L models poke above the top screen edge and get clipped. */
 const SEAT_RIG: Record<CharmSize, { seatLen: number; cordSegLen: number }> = {
-  small: { seatLen: 48, cordSegLen: 20 },
-  medium: { seatLen: 60, cordSegLen: 24 },
-  large: { seatLen: 72, cordSegLen: 28 },
+  small: { seatLen: 48, cordSegLen: 22 },
+  medium: { seatLen: 60, cordSegLen: 29 },
+  large: { seatLen: 72, cordSegLen: 38 },
 };
 
 export function companionSpec(def: CompanionDef, size: CharmSize): CompanionSizeSpec {

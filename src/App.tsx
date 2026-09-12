@@ -66,6 +66,7 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const [moving, setMoving] = useState(false);
   const [customEmoji, setCustomEmoji] = useState("");
   const [activeRitual, setActiveRitual] = useState<RitualType | null>(null);
   const [charmPos, setCharmPos] = useState({ x: 400, y: ANCHOR_Y + CHARM_INDEX * 16 });
@@ -90,12 +91,12 @@ export default function App() {
     localStorage.setItem("danglings.settings", JSON.stringify(settings));
   }, [settings]);
 
-  // The menu must keep the window interactive for its whole (tall) area, no
-  // matter what the pointer handlers that opened/closed it did around it.
+  // The menu (and move mode) must keep the window interactive for the whole
+  // screen, no matter what the pointer handlers around them did.
   useEffect(() => {
     menuOpenRef.current = menuOpen;
-    invoke("set_force_interactive", { active: menuOpen }).catch(() => {});
-  }, [menuOpen]);
+    invoke("set_force_interactive", { active: menuOpen || moving }).catch(() => {});
+  }, [menuOpen, moving]);
 
   useEffect(() => {
     invoke<[number, number]>("get_stage_size").then(([w, h]) => {
@@ -285,6 +286,27 @@ export default function App() {
     setForceInteractive(false);
   };
 
+  // Move mode: a full-screen capture layer follows the pointer with the anchor
+  // (the rope/swing tracks it live) until a click places it.
+  const beginMove = () => {
+    setMenuOpen(false);
+    setMoving(true);
+  };
+
+  const onMoveMove = (e: React.PointerEvent) => {
+    if (!stage) return;
+    const x = Math.min(Math.max(e.clientX, MARGIN), stage.width - MARGIN);
+    anchorXRef.current = x;
+    setAnchorX(x);
+  };
+
+  const onMoveConfirm = () => {
+    setMoving(false);
+    if (stage) {
+      setSettings((s) => ({ ...s, anchorRatio: anchorXRef.current / stage.width }));
+    }
+  };
+
   if (!stage) return null;
 
   const rope = pointsRef.current;
@@ -381,6 +403,15 @@ export default function App() {
             setForceInteractive={setForceInteractive}
           />
         </Suspense>
+      )}
+
+      {moving && (
+        <div className="move-capture" onPointerMove={onMoveMove} onPointerDown={onMoveConfirm}>
+          <div className="move-marker" style={{ left: anchorX }}>
+            <span className="move-bead" />
+            <span className="move-hint">click to place</span>
+          </div>
+        </div>
       )}
 
       {menuOpen && (
@@ -499,6 +530,9 @@ export default function App() {
                 onChange={(e) => setSettings((prev) => ({ ...prev, windIntensity: Number(e.target.value) }))}
               />
             </div>
+            <button className="menu-move" onClick={beginMove}>
+              Move hanging spot
+            </button>
           </div>
         </div>
       )}
