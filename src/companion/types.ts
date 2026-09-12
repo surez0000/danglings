@@ -158,12 +158,14 @@ export type CompanionSizeSpec = {
   anchorFracY: number;
 };
 
-/* Cord length (4 segments) must exceed the model height by ~20px of headroom,
-   or M/L models poke above the top screen edge and get clipped. */
+/* The anchor sits at the true top edge (y=0), partly behind the macOS menu bar
+   — the rope reads as tied somewhere above, which is the point. Cord length
+   (4 segments) = model height + ~56px, so every size's head clears the menu-bar
+   strip (~24-37px) with sway headroom to spare. */
 const SEAT_RIG: Record<CharmSize, { seatLen: number; cordSegLen: number }> = {
-  small: { seatLen: 48, cordSegLen: 22 },
-  medium: { seatLen: 60, cordSegLen: 29 },
-  large: { seatLen: 72, cordSegLen: 38 },
+  small: { seatLen: 48, cordSegLen: 30 },
+  medium: { seatLen: 60, cordSegLen: 38 },
+  large: { seatLen: 72, cordSegLen: 46 },
 };
 
 export function companionSpec(def: CompanionDef, size: CharmSize): CompanionSizeSpec {
