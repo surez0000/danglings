@@ -1,10 +1,10 @@
 import {
+  ACESFilmicToneMapping,
   Box3,
   DirectionalLight,
   Group,
   HemisphereLight,
   Mesh,
-  NoToneMapping,
   OrthographicCamera,
   PMREMGenerator,
   Scene,
@@ -53,8 +53,10 @@ function buildRenderer(canvas: HTMLCanvasElement, w: number, h: number, dpr: num
   renderer.setSize(w, h, false);
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = SRGBColorSpace;
-  /* NoToneMapping keeps the flat-cute baseColor punchy at ~100px. */
-  renderer.toneMapping = NoToneMapping;
+  /* Filmic tone mapping gives the toy-like contrast and color punch that flat
+     NoToneMapping lacks under IBL; slight exposure lift keeps mids bright. */
+  renderer.toneMapping = ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.25;
   return renderer;
 }
 
@@ -116,12 +118,18 @@ export async function createBirdScene(
   };
   applyEnvironment();
 
-  /* No shadows: the companion hangs mid-air, a shadow map would be a pointless
-     extra depth pass. The punctual lights add direction on top of the IBL. */
-  scene.add(new HemisphereLight(0xbfd8ff, 0x8a7a66, 0.5));
-  const sun = new DirectionalLight(0xfff4e0, 1.4);
-  sun.position.set(1.5, 2.5, 2);
+  /* Contrast comes from directionality: a restrained environment for base fill,
+     a strong warm key for form shading, and a cool low rim to pop the
+     silhouette. No shadows — the companion hangs mid-air, a shadow map would be
+     a pointless extra depth pass. */
+  scene.environmentIntensity = 0.55;
+  scene.add(new HemisphereLight(0xbfd8ff, 0x8a7a66, 0.35));
+  const sun = new DirectionalLight(0xfff4e0, 2.4);
+  sun.position.set(1.8, 2.4, 2);
   scene.add(sun);
+  const rim = new DirectionalLight(0xa8c8ff, 0.7);
+  rim.position.set(-2, 0.6, -2.5);
+  scene.add(rim);
 
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
