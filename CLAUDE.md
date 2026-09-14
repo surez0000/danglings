@@ -37,7 +37,8 @@ that is click-through except near the charm. Tray menu + Shift+Alt+K toggle.
   - `useSwing.ts` — self-contained Verlet swing (two 4-segment cords + stiff seat bar);
     deliberately duplicates the rope primitives so charm physics stays untouched.
   - `birdBehavior.ts` — pure state machine (idle/watch/flutter/peck/chirp/dragged/doze),
-    look-at math, pose smoothing, doze vignettes.
+    look-at math, pose smoothing, doze vignettes. `APPROACH_STARTLE = false` gates the
+    watch→flutter transition off (approach jerk); flip it to bring the startle back.
   - `birdScene.ts` — three.js ortho scene + GLTF/meshopt/webp loader, context-loss recovery.
     The ONLY file that statically imports three; only ever loaded via dynamic import.
     Rigged GLBs are auto-detected (Meshy bones are anonymous: heuristics by normalized
@@ -56,10 +57,40 @@ that is click-through except near the charm. Tray menu + Shift+Alt+K toggle.
     sleep/wake gates, hit-point sends, drag/click/context-menu surfaces, glyph fallback.
   - `BirdGlyph.tsx` — flat-cute SVG bird: picker thumbnail, GLB-loading placeholder, and
     permanent fallback when WebGL/GLB fail. Must never import three.
+- `src/reminders/` — desk-time reminders (water / move / eye rest / custom), added 2026-09-14:
+  - `types.ts` — Reminder/Schedule model, defaults (water 45 min ON, move 50 min ON, eyes 20
+    min OFF), localStorage `danglings.reminders` (config) + `danglings.reminders.state`
+    (counters/snoozes/water-today). Built-ins merge by id so new defaults reach old users.
+  - `engine.ts` — pure scheduler. Time counts only while idle < 120 s; idle ≥ awayAfterMin
+    (5 min) = away → clocks pause, and `resetOnAway` ones (move, eyes) restart on return;
+    nothing fires in the first 60 s back. Fixed-time slots fire only within 15 min of their
+    time (missed slots are skipped, never delivered late). One bubble at a time (`presented`).
+  - `useReminders.ts` — 5 s `setInterval` (never the rAF loop) that invokes `get_idle_seconds`,
+    steps the engine, plays `playReminderChime`, exposes `active` + acknowledge/snooze/preview.
+  - `ReminderBubble.tsx` — the speech bubble beside the character (click = primary,
+    right-click = snooze/later); reports its rect so App registers it via
+    `update_extra_hit_points` (the overlay is click-through everywhere else).
+  - `RemindersPanel.tsx` — the menu's "reminders" tab (toggles, −/+ interval steppers,
+    water count, custom interval/fixed-time reminders with weekday chips, ▶ preview).
+- `src/updater/useUpdater.ts` — tauri-plugin-updater + plugin-process. Auto-check 20 s after
+  launch then every 6 h (skipped in `tauri dev`), manual "Check for updates" in settings; an
+  available update is offered by the CHARACTER as a bubble ("Update now" / "Later" = 24 h).
+  Feed: `plugins.updater.endpoints` in tauri.conf.json → GitHub Releases `latest.json`
+  (built by `scripts/make-latest-json.mjs` after `tauri build`). Signing key:
+  `~/.tauri/danglings.key` (+ `.pub` pasted as `pubkey`); builds must set
+  `TAURI_SIGNING_PRIVATE_KEY_PATH`. Losing the key = no more updates for shipped users.
+- `src/system/useAutostart.ts` — tauri-plugin-autostart (LaunchAgent / HKCU Run). Setting
+  `launchAtLogin` defaults ON and is synced to the OS on launch in packaged builds only
+  (in `tauri dev` the registered binary would be target/debug — the explicit toggle still acts).
+- The right-click menu now has three tabs: look (companions/charms/emoji) · reminders · settings
+  (size, sway, move, launch at login, version + update check).
 - `src-tauri/src/lib.rs` — the core trick: window starts `set_ignore_cursor_events(true)`;
   frontend sends charm/anchor coords via `update_hit_points` every other frame; a 16ms Rust
   thread polls the global cursor and flips interactivity when the cursor is within 42px of a
-  hit point (58px hysteresis to leave). `set_force_interactive` pins it during drags/menu.
+  hit point (58px hysteresis to leave). `set_force_interactive` pins it during drags/menu. `update_extra_hit_points` adds the
+  bubble's points (a second set, so neither mode's wholesale `points` replace clobbers it);
+  `get_idle_seconds` returns OS seconds-since-last-input (CGEventSourceSecondsSinceLastEventType /
+  GetLastInputInfo, permission-free) for the reminders' desk clock.
   The same thread powers the opt-in `cursor-moved` event stream (see Gotchas), and
   `toggle_charm` emits `overlay-visibility` (bool) on both hide/show branches.
 
@@ -118,6 +149,11 @@ separate lazy chunk, not the entry chunk.
 - `public/dev-viewer.html` is a dev-only three.js model viewer (open
   `http://localhost:1420/dev-viewer.html?model=<name>` while `tauri dev` runs) for checking
   optimized GLBs and measuring aspect/focus fractions for registry entries.
+- **Audio without a gesture is fine**: wry sets `WKAudiovisualMediaTypes::None` on macOS and
+  tauri.conf.json passes `--autoplay-policy=no-user-gesture-required` to WebView2, so reminder
+  chimes may create the AudioContext themselves. (`playPeck`'s gate predates this check.)
+- Dev demo hooks (DEV builds only): `http://localhost:1420/?demo=reminder` previews the water
+  bubble, `?demo=update` fakes an available update — for styling the bubble in a plain browser.
 - macOS runs with `ActivationPolicy::Accessory` (no Dock icon; tray + Shift+Alt+K only).
 - **Spaces/fullscreen pinning**: `"visibleOnAllWorkspaces": true` in `tauri.conf.json` sets
   CanJoinAllSpaces at creation; `apply_macos_overlay_behavior` in `lib.rs` then raw-sets the
@@ -160,7 +196,9 @@ lifetime everything-unlock ~$6.99–9.99. Off-store payments via Lemon Squeezy o
 ### Phase 1 — companion engine (flagship: bird on a swing)
 - Original cute bird (NOT Tweety — WB IP) sitting on a swing hung from the top edge; head/eyes
   track the global cursor (cursor position already polled in Rust — feed it to frontend).
-- Reactions: flutter when cursor near, peck on idle, chirp on click, swing physics on flick.
+- Reactions: peck on idle, chirp on click, swing physics on flick. The approach-startle
+  flutter is built but gated OFF via `APPROACH_STARTLE` in birdBehavior.ts (it read as a
+  jerk when the cursor simply moved toward the companion) — re-enable in a later update.
 - Rendering: Meshy AI–generated rigged GLB via three.js, transparent WebGL canvas,
   ON-DEMAND rendering (render only on movement, cap ~30fps, sleep idle) for battery.
   Fallback if battery cost too high: bake sprite sheets.
@@ -172,6 +210,36 @@ short-video launch (GIF-ability is the growth loop).
 
 ### Phase 3 — Steam
 Steamworks setup ($100 Steam Direct), Windows + Mac builds, store page assets.
+
+## Release checklist (auto-update depends on it)
+
+No Apple Developer ID (decision 2026-09-14: not paying the $99/yr for now) → the macOS app is
+**ad-hoc signed** (`bundle.macOS.signingIdentity: "-"`), not notarized. Users right-click → Open
+once (README documents `xattr -cr`). The updater is unaffected: it verifies OUR minisign
+signature, and a self-downloaded bundle carries no quarantine flag. Windows NSIS is unsigned
+too (SmartScreen "More info → Run anyway"). Revisit both when revenue justifies certificates.
+
+1. Bump `version` in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `package.json`
+   (`npm version x.y.z --no-git-tag-version` does package.json + lock).
+2. macOS (this Mac), universal so one DMG serves Intel + Apple silicon
+   (`rustup target add x86_64-apple-darwin` once). NOTE: `tauri build` reads the key CONTENT
+   from `TAURI_SIGNING_PRIVATE_KEY` — the `_PATH` variable is only understood by
+   `tauri signer sign` (learned the hard way on 1.0.0; the unsigned build's tarball was then
+   signed by hand with `npx tauri signer sign --private-key-path ~/.tauri/danglings.key -p "" <tgz>`):
+   `TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/danglings.key)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+   npm run tauri build -- --target universal-apple-darwin`
+   → `src-tauri/target/universal-apple-darwin/release/bundle/{dmg,macos}/`.
+3. Windows (Windows machine, PowerShell): copy `~/.tauri/danglings.key` to
+   `%USERPROFILE%\.tauri\danglings.key`, then
+   `$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$env:USERPROFILE\.tauri\danglings.key" -Raw`,
+   `$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""`, `npm run tauri build`
+   → `src-tauri/target/release/bundle/nsis/Danglings_x.y.z_x64-setup.exe(.sig)`.
+4. `node scripts/make-latest-json.mjs --notes "…"` on each machine → `dist-release/latest.json`.
+   It MERGES with an existing `dist-release/latest.json` of the same version, so copy the
+   macOS one to the Windows machine first (or vice versa) to get both platforms in one file.
+5. Commit, tag `v<version>`, create the GitHub release and upload: the .dmg, the -setup.exe,
+   `Danglings.app.tar.gz` + `.sig`, `…-setup.exe.sig`, and `latest.json`. Shipped apps fetch
+   `releases/latest/download/latest.json`, so the release must be marked "latest".
 
 ## Conventions
 

@@ -107,6 +107,12 @@ const FLUTTER_ANIM_MS = 700;
 const FLUTTER_MIN_MS = 600;
 const FLUTTER_COOLDOWN_MS = 3000;
 const FLUTTER_IMPULSE = 1.5;
+/* Approach startle (watch -> flutter when the cursor closes in on the model).
+   OFF for this release: the hop + puff + sideways seat shove read as a jerk
+   whenever you simply moved the mouse toward the companion. The flutter state,
+   wing flap, cooldown and the riko "flutter" clip stay fully wired so a later
+   update can re-enable it (or expose it as a setting) by flipping this flag. */
+export const APPROACH_STARTLE = false;
 
 const PECK_GAP_MIN_MS = 8000;
 const PECK_GAP_MAX_MS = 20000;
@@ -331,6 +337,7 @@ export function stepBehavior(b: Behavior, ctx: BehaviorCtx): StepResult {
       if (!cursorRecent) {
         enter(b, "idle", now);
       } else if (
+        APPROACH_STARTLE &&
         now >= b.flutterCooldownUntil &&
         (dist < FLUTTER_ENTER_NEAR_PX ||
           (dist < FLUTTER_ENTER_FAR_PX && approachSpeed(ctx) > FLUTTER_APPROACH_PX_S))

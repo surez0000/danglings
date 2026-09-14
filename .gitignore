@@ -26,3 +26,9 @@ dist-ssr
 # Local 3D source exports (too large for git; runtime assets get compressed into src/assets)
 3ds/
 Rigged models/
+
+# Release manifests/uploads assembled by scripts/make-latest-json.mjs
+dist-release/
+
+# Local Claude desktop launch config
+.claude/launch.json

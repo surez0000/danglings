@@ -30,9 +30,45 @@ Danglings is a transparent, always-on-top desktop overlay. A single charm hangs 
 
 The window is click-through everywhere except the charm itself, so it never gets in the way of whatever you're actually doing.
 
+## Companions
+
+Swap the charm for a 3D companion on a swing — a blue bird, a monkey, an elephant, a kitten and more. It watches your cursor, chirps when you click it, and dozes off while you work. Flick the swing; it settles on its own.
+
+## Reminders that count desk time
+
+Right-click → **reminders**. Danglings keeps three gentle clocks that only run while you're actually at the desk (it asks the OS how long since your last keypress or mouse move — no permissions needed):
+
+- 💧 **Water** — every 45 min by default. Click "Drank one" to log a glass toward a daily 8.
+- 🚶 **Move** — after 50 min of continuous desk time. Stepping away for 5 minutes resets it.
+- 👀 **Eye rest** — every 20 min, off by default: look 20 feet away for 20 seconds.
+- ⏰ **Your own** — anything on an interval or at fixed times on chosen weekdays.
+
+Reminders arrive as a small speech bubble beside your charm or companion with a soft chime. Click it to acknowledge, right-click to snooze ten minutes. Everything pauses while you're away.
+
+## Always there, always current
+
+- **Launch at login** is on by default (toggle it in **settings**).
+- **Updates** are one click: the companion holds up a little gift when a new version is ready, and installing restarts the app in a few seconds. Danglings checks a few times a day; turn that off in settings if you prefer.
+
 ## Tech stack
 
 Built with [Tauri](https://tauri.app/) (Rust) for the desktop shell, [React](https://react.dev/) + TypeScript for the UI, and [Vite](https://vitejs.dev/) for the dev/build tooling. The rope/thread physics are a small custom simulation ([`src/useRope.ts`](src/useRope.ts)).
+
+## Install
+
+Download the latest release from the [Releases](https://github.com/surez0000/danglings/releases) page.
+
+**macOS** — open the `.dmg` and drag Danglings to Applications. The app is not notarized (no paid Apple developer account yet), so the first launch needs one extra step: **right-click Danglings.app → Open**, then confirm. If macOS says the app "is damaged" or "cannot be checked", run once in Terminal:
+
+```bash
+xattr -cr /Applications/Danglings.app
+```
+
+After that it opens normally, and updates install through the app itself.
+
+**Windows** — run `Danglings_x.y.z_x64-setup.exe`. SmartScreen may show "Windows protected your PC" because the installer isn't code-signed; click **More info → Run anyway**.
+
+Danglings lives in the menu bar / tray (no Dock icon). **Shift+Alt+K** shows or hides it.
 
 ## Getting started
 

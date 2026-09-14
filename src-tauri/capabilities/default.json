@@ -10,6 +10,9 @@
     "core:window:allow-start-dragging",
     "opener:default",
     "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister"
+    "global-shortcut:allow-unregister",
+    "autostart:default",
+    "updater:default",
+    "process:default"
   ]
 }

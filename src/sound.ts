@@ -227,3 +227,31 @@ export function playPeck() {
     // audio unsupported/blocked — fail silently
   }
 }
+
+// Reminder chime: two soft sine notes with a little room, quiet enough to sit
+// under music. Fires with NO user gesture — wry configures WKWebView with
+// WKAudiovisualMediaTypes::None (and WebView2 gets --autoplay-policy=
+// no-user-gesture-required via tauri.conf.json), so creating/resuming the
+// context here is allowed. If a platform still refuses, the bubble shows and
+// the chime is simply skipped.
+export function playReminderChime() {
+  try {
+    const t = getCtx().currentTime;
+    tone(659.25, t, 0.32, { type: "sine", gain: 0.1, wet: 0.35 });
+    tone(880, t + 0.17, 0.42, { type: "sine", gain: 0.09, wet: 0.4 });
+  } catch {
+    // audio unsupported/blocked — fail silently
+  }
+}
+
+// Update chime: a small rising triad — "something new arrived".
+export function playUpdateChime() {
+  try {
+    const t = getCtx().currentTime;
+    tone(523.25, t, 0.22, { type: "triangle", gain: 0.08, wet: 0.3 });
+    tone(659.25, t + 0.12, 0.22, { type: "triangle", gain: 0.08, wet: 0.3 });
+    tone(783.99, t + 0.24, 0.4, { type: "triangle", gain: 0.09, wet: 0.4 });
+  } catch {
+    // audio unsupported/blocked — fail silently
+  }
+}

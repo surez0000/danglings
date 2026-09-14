@@ -11,6 +11,10 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 use windows::Win32::Foundation::POINT;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+#[cfg(target_os = "windows")]
+use windows::Win32::System::SystemInformation::GetTickCount;
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 
 const HIT_RADIUS_ENTER: f64 = 42.0;
 const HIT_RADIUS_EXIT: f64 = 58.0;
@@ -21,6 +25,10 @@ const CURSOR_SETTLE_INTERVAL: Duration = Duration::from_millis(150);
 
 struct HitState {
     points: Vec<(f64, f64)>,
+    /* Second, independently-owned point set: the reminder/update bubble. Kept
+       apart from `points` because charm mode and companion mode each replace
+       `points` wholesale every other frame. */
+    extra_points: Vec<(f64, f64)>,
     force_interactive: bool,
     cursor_stream: bool,
 }
@@ -31,6 +39,52 @@ type SharedHitState = Arc<Mutex<HitState>>;
 fn update_hit_points(state: tauri::State<SharedHitState>, points: Vec<(f64, f64)>) {
     let mut s = state.lock().unwrap();
     s.points = points;
+}
+
+#[tauri::command]
+fn update_extra_hit_points(state: tauri::State<SharedHitState>, points: Vec<(f64, f64)>) {
+    let mut s = state.lock().unwrap();
+    s.extra_points = points;
+}
+
+// Seconds since the user last touched keyboard or mouse anywhere on the
+// system — the reminders' notion of "at the desk". Permission-free on both
+// platforms; polled by the frontend every few seconds, not per frame.
+#[cfg(target_os = "macos")]
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    fn CGEventSourceSecondsSinceLastEventType(state_id: i32, event_type: u32) -> f64;
+}
+
+#[cfg(target_os = "macos")]
+fn idle_seconds() -> f64 {
+    // kCGEventSourceStateCombinedSessionState = 0, kCGAnyInputEventType = !0
+    unsafe { CGEventSourceSecondsSinceLastEventType(0, u32::MAX) }
+}
+
+#[cfg(target_os = "windows")]
+fn idle_seconds() -> f64 {
+    let mut info = LASTINPUTINFO {
+        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+    unsafe {
+        if GetLastInputInfo(&mut info).as_bool() {
+            let now = GetTickCount();
+            return now.wrapping_sub(info.dwTime) as f64 / 1000.0;
+        }
+    }
+    0.0
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn idle_seconds() -> f64 {
+    0.0
+}
+
+#[tauri::command]
+fn get_idle_seconds() -> f64 {
+    idle_seconds()
 }
 
 #[tauri::command]
@@ -170,16 +224,21 @@ fn start_hit_test_loop(app: tauri::AppHandle, state: SharedHitState) {
                 .map(|p| (p.x as f64, p.y as f64))
                 .unwrap_or((0.0, 0.0));
 
-            let (force, cursor_stream, points) = {
+            let (force, cursor_stream, points, extra_points) = {
                 let s = state.lock().unwrap();
-                (s.force_interactive, s.cursor_stream, s.points.clone())
+                (
+                    s.force_interactive,
+                    s.cursor_stream,
+                    s.points.clone(),
+                    s.extra_points.clone(),
+                )
             };
 
             let cursor = cursor_local(window_pos, scale);
 
             let near_charm = if let Some((local_x, local_y)) = cursor {
                 let radius = if currently_interactive { HIT_RADIUS_EXIT } else { HIT_RADIUS_ENTER };
-                points.iter().any(|(px, py)| {
+                points.iter().chain(extra_points.iter()).any(|(px, py)| {
                     let dx = local_x - px;
                     let dy = local_y - py;
                     (dx * dx + dy * dy).sqrt() < radius
@@ -238,6 +297,7 @@ fn start_hit_test_loop(app: tauri::AppHandle, state: SharedHitState) {
 pub fn run() {
     let hit_state: SharedHitState = Arc::new(Mutex::new(HitState {
         points: Vec::new(),
+        extra_points: Vec::new(),
         force_interactive: false,
         cursor_stream: false,
     }));
@@ -245,6 +305,16 @@ pub fn run() {
     tauri::Builder::default()
         .manage(hit_state.clone())
         .plugin(tauri_plugin_opener::init())
+        // Launch at login: LaunchAgent on macOS, HKCU Run key on Windows. The
+        // frontend toggles it; `--autostart` lets us tell a login launch apart.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--autostart"]),
+        ))
+        // One-click updates: signed latest.json on GitHub Releases (see
+        // tauri.conf.json plugins.updater); process plugin relaunches after install.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -258,10 +328,12 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             update_hit_points,
+            update_extra_hit_points,
             set_force_interactive,
             set_cursor_stream,
             focus_window,
-            get_stage_size
+            get_stage_size,
+            get_idle_seconds
         ])
         .setup(move |app| {
             // Overlay app: no Dock icon, never steals focus on launch.

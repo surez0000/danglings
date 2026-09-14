@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { createRope, stepRope, type RopePoint } from "./useRope";
@@ -7,9 +7,14 @@ import { playRitualSound } from "./sound";
 import { CharmGlyph } from "./charmArt";
 // Bundle boundary: App may statically import only types/companionStore/BirdGlyph
 // from src/companion — BirdCompanion (and through it three.js) stays lazy.
-import { COMPANIONS, type CompanionSelection } from "./companion/types";
+import { COMPANIONS, COMPANION_BY_ID, companionSpec, type CompanionSelection } from "./companion/types";
 import { loadCompanion, saveCompanion } from "./companion/companionStore";
 import { BirdGlyph } from "./companion/BirdGlyph";
+import { useReminders } from "./reminders/useReminders";
+import { ReminderBubble } from "./reminders/ReminderBubble";
+import { RemindersPanel } from "./reminders/RemindersPanel";
+import { useUpdater } from "./updater/useUpdater";
+import { useAutostart } from "./system/useAutostart";
 import "./App.css";
 
 const BirdCompanion = lazy(() => import("./companion/BirdCompanion"));
@@ -19,8 +24,14 @@ const MAX_TILT_DEG = 22;
 const ANCHOR_Y = 0;
 const CHARM_INDEX = 6;
 const MARGIN = 26;
+/* Bubble width budget used to decide which side of the character it sits on. */
+const BUBBLE_ROOM = 280;
+/* Swing cords are 4 segments (useSwing CORD_SEGMENTS); used for the bubble's
+   rest-position anchor only, never for physics. */
+const CORD_SEGMENTS = 4;
 
 export type CharmSize = "small" | "medium" | "large";
+type MenuTab = "look" | "reminders" | "settings";
 
 const SIZE_PX: Record<CharmSize, number> = { small: 24, medium: 40, large: 56 };
 
@@ -29,6 +40,8 @@ type Settings = {
   windEnabled: boolean;
   windIntensity: number;
   anchorRatio: number;
+  launchAtLogin: boolean;
+  autoUpdate: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -36,6 +49,8 @@ const DEFAULT_SETTINGS: Settings = {
   windEnabled: true,
   windIntensity: 1,
   anchorRatio: 0.5,
+  launchAtLogin: true,
+  autoUpdate: true,
 };
 
 function loadCharm(): Charm {
@@ -65,8 +80,10 @@ export default function App() {
   const [companion, setCompanion] = useState<CompanionSelection>(loadCompanion);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuTab, setMenuTab] = useState<MenuTab>("look");
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [moving, setMoving] = useState(false);
+  const [visible, setVisible] = useState(true);
   const [customEmoji, setCustomEmoji] = useState("");
   const [activeRitual, setActiveRitual] = useState<RitualType | null>(null);
   const [charmPos, setCharmPos] = useState({ x: 400, y: ANCHOR_Y + CHARM_INDEX * 16 });
@@ -85,6 +102,12 @@ export default function App() {
   const frameCountRef = useRef(0);
 
   const sizePx = SIZE_PX[settings.size];
+
+  // Reminders count desk time always; they DELIVER only while the overlay is
+  // shown and nothing modal (picker, move mode) is up.
+  const reminders = useReminders(visible && !menuOpen && !moving);
+  const updater = useUpdater(settings.autoUpdate);
+  const autostart = useAutostart(settings.launchAtLogin);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -119,6 +142,27 @@ export default function App() {
   useEffect(() => {
     saveCompanion(companion);
   }, [companion]);
+
+  // Tray/shortcut hide+show: bubbles wait while hidden.
+  useEffect(() => {
+    const unlisten = listen<boolean>("overlay-visibility", (event) => setVisible(event.payload));
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, []);
+
+  // Dev-only demo hooks so the bubble can be checked in a plain browser:
+  // ?demo=reminder | ?demo=update
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const demo = new URLSearchParams(window.location.search).get("demo");
+    if (demo === "update") updater.devMock();
+    if (demo === "reminder") {
+      const water = reminders.config.reminders.find((r) => r.id === "water");
+      if (water) reminders.preview(water);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     // In bird mode BirdCompanion owns the only loop (and hit-point sends).
@@ -167,6 +211,22 @@ export default function App() {
       unlisten.then((f) => f());
     };
   }, [stage]);
+
+  // The bubble is the one interactive thing that lives outside the rope /
+  // swing point sets, so it registers its own points with the Rust hit-test.
+  const onBubbleRect = useCallback((rect: DOMRect | null) => {
+    if (!rect) {
+      invoke("update_extra_hit_points", { points: [] }).catch(() => {});
+      return;
+    }
+    const pts: [number, number][] = [];
+    const step = 36;
+    for (let y = rect.top + 8; y < rect.bottom; y += step) {
+      for (let x = rect.left + 8; x < rect.right; x += step) pts.push([x, y]);
+    }
+    pts.push([rect.right - 8, rect.bottom - 8], [rect.right - 8, rect.top + 8]);
+    invoke("update_extra_hit_points", { points: pts }).catch(() => {});
+  }, []);
 
   const setForceInteractive = (active: boolean) => {
     invoke("set_force_interactive", { active }).catch(() => {});
@@ -311,6 +371,12 @@ export default function App() {
     }
   };
 
+  const toggleLaunchAtLogin = () => {
+    const next = !settings.launchAtLogin;
+    setSettings((s) => ({ ...s, launchAtLogin: next }));
+    autostart.apply(next);
+  };
+
   if (!stage) return null;
 
   const rope = pointsRef.current;
@@ -327,6 +393,125 @@ export default function App() {
   // .menu vertical padding, content-box).
   const menuMaxH = Math.min(640, Math.round(stage.height * 0.8));
   const menuTop = Math.max(12, Math.min(menuTopRaw, stage.height - menuMaxH - 48));
+
+  // Bubble attach point: the character's head at REST, beside the hanging
+  // spot — not the live swing position, so the bubble sits still while the
+  // model sways. Flips to the left when there's no room on the right.
+  let headY: number;
+  let halfWidth: number;
+  if (companion.kind === "companion") {
+    const def = COMPANION_BY_ID[companion.id];
+    const spec = companionSpec(def, settings.size);
+    if (spec.attach === "seat") {
+      headY = ANCHOR_Y + CORD_SEGMENTS * spec.cordSegLen - spec.modelPx * 0.72;
+      halfWidth = spec.modelPx * 0.55;
+    } else {
+      headY = ANCHOR_Y + spec.modelPx * def.focusFrac;
+      halfWidth = Math.max(def.aspect * spec.modelPx * 0.5, 24);
+    }
+  } else {
+    headY = ANCHOR_Y + CHARM_INDEX * 16 + sizePx / 2;
+    halfWidth = sizePx / 2;
+  }
+  const bubbleSide: "left" | "right" = anchorX + halfWidth + BUBBLE_ROOM < stage.width ? "right" : "left";
+  const bubbleX = bubbleSide === "right" ? anchorX + halfWidth : anchorX - halfWidth;
+  const bubbleY = Math.max(36, headY);
+
+  let bubble: React.ReactNode = null;
+  if (reminders.active) {
+    const r = reminders.active.reminder;
+    bubble = (
+      <ReminderBubble
+        x={bubbleX}
+        y={bubbleY}
+        side={bubbleSide}
+        emoji={r.emoji}
+        title={r.name}
+        message={r.message}
+        primary={{ label: r.kind === "water" ? "Drank one" : "Done", onClick: reminders.acknowledge }}
+        secondary={{ label: "Snooze 10 min", onClick: reminders.snooze }}
+        onRect={onBubbleRect}
+      />
+    );
+  } else {
+    const u = updater.state;
+    if (u.phase === "available") {
+      bubble = (
+        <ReminderBubble
+          x={bubbleX}
+          y={bubbleY}
+          side={bubbleSide}
+          emoji="🎁"
+          title={`Danglings ${u.version} is ready`}
+          message="One click to update — it comes back in a few seconds."
+          primary={{ label: "Update now", onClick: updater.install }}
+          secondary={{ label: "Later", onClick: updater.later }}
+          onRect={onBubbleRect}
+        />
+      );
+    } else if (u.phase === "downloading" || u.phase === "installing" || u.phase === "restarting") {
+      const msg =
+        u.phase === "downloading"
+          ? u.progress == null
+            ? "Downloading…"
+            : `Downloading ${Math.round(u.progress * 100)}%`
+          : u.phase === "installing"
+            ? "Installing…"
+            : "Restarting…";
+      bubble = (
+        <ReminderBubble
+          x={bubbleX}
+          y={bubbleY}
+          side={bubbleSide}
+          emoji="✨"
+          title={`Updating to ${u.version}`}
+          message={msg}
+          progress={u.progress ?? null}
+          busy
+          onRect={onBubbleRect}
+        />
+      );
+    } else if (u.phase === "error" && u.fromInstall) {
+      bubble = (
+        <ReminderBubble
+          x={bubbleX}
+          y={bubbleY}
+          side={bubbleSide}
+          emoji="🫤"
+          title="The update didn't finish"
+          message={u.error ?? "Something went wrong."}
+          primary={{ label: "OK", onClick: updater.dismiss }}
+          secondary={{ label: "Try again", onClick: updater.install }}
+          onRect={onBubbleRect}
+        />
+      );
+    }
+  }
+
+  const updateHint = (() => {
+    const u = updater.state;
+    switch (u.phase) {
+      case "checking":
+        return { text: "Checking…", cls: "" };
+      case "upToDate":
+        return { text: `You're on the latest version (${updater.currentVersion}).`, cls: "ok" };
+      case "available":
+        return { text: `${u.version} is ready — your companion is holding the update.`, cls: "ok" };
+      case "downloading":
+      case "installing":
+      case "restarting":
+        return { text: `Updating to ${u.version}…`, cls: "" };
+      case "error":
+        return { text: u.error ?? "Update check failed.", cls: "warn" };
+      default:
+        return {
+          text: settings.autoUpdate
+            ? "Checks a few times a day; installs in one click from the bubble."
+            : "Automatic checks are off.",
+          cls: "",
+        };
+    }
+  })();
 
   return (
     <div
@@ -410,6 +595,8 @@ export default function App() {
         </Suspense>
       )}
 
+      {bubble}
+
       {moving && (
         <div className="move-capture" onPointerMove={onMoveMove} onPointerDown={onMoveConfirm}>
           <div className="move-marker" style={{ left: anchorX }}>
@@ -430,138 +617,202 @@ export default function App() {
           onPointerDown={(e) => e.stopPropagation()}
         >
           <div className="menu-arrow" style={{ left: Math.min(133, menuAnchorX - Math.max(menuAnchorX - 145, 12) - 8) }} />
-          <p className="menu-label">companions</p>
-          <div className="companion-row">
-            <button
-              className={`companion-card ${companion.kind === "charm" ? "active" : ""}`}
-              onClick={() => chooseCompanion({ kind: "charm" })}
-            >
-              <span className="companion-thumb">
-                <CharmGlyph charm={charm} size={30} />
-              </span>
-              <span className="companion-name">Classic charm</span>
-              <span className="companion-desc">Your lucky charm on its thread, right where you left it.</span>
-              <span className="companion-action">Hang it up</span>
-            </button>
-            {COMPANIONS.map((c) => {
-              const isActive = companion.kind === "companion" && companion.id === c.id;
-              const activeVariant =
-                companion.kind === "companion" && companion.id === c.id
-                  ? (companion.variantId ?? c.variants?.[0]?.id)
-                  : undefined;
-              return (
-                <button
-                  key={c.id}
-                  className={`companion-card ${isActive ? "active" : ""}`}
-                  onClick={() =>
-                    // Re-clicking the active card keeps its chosen color.
-                    chooseCompanion({ kind: "companion", id: c.id, variantId: activeVariant })
-                  }
-                >
-                  <span className="companion-thumb">
-                    {c.id === "bluebird" ? <BirdGlyph size={30} /> : <span className="companion-emoji">{c.emoji}</span>}
-                  </span>
-                  <span className="companion-name">{c.name}</span>
-                  {c.variants && (
-                    <span className="variant-dots">
-                      {c.variants.map((v) => (
-                        <span
-                          key={v.id}
-                          role="button"
-                          title={v.label}
-                          className={`variant-dot ${isActive && activeVariant === v.id ? "active" : ""}`}
-                          style={{ background: v.swatch }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            chooseCompanion({ kind: "companion", id: c.id, variantId: v.id });
-                          }}
-                        />
-                      ))}
-                    </span>
-                  )}
-                  <span className="companion-desc">{c.description}</span>
-                  <span className="companion-action">{c.actionLabel}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="menu-divider" />
-          <p className="menu-label">choose a charm</p>
-          <div className="charm-grid">
-            {DEFAULT_CHARMS.map((c) => (
+
+          <div className="menu-tabs" role="tablist">
+            {(["look", "reminders", "settings"] as MenuTab[]).map((t) => (
               <button
-                key={c.id}
-                className={`charm-cell ${companion.kind === "charm" && c.id === charm.id ? "active" : ""}`}
-                title={c.name}
-                onClick={() => chooseCharm(c)}
+                key={t}
+                role="tab"
+                aria-selected={menuTab === t}
+                className={`menu-tab ${menuTab === t ? "active" : ""}`}
+                onClick={() => setMenuTab(t)}
               >
-                <span className="charm-cell-emoji">{c.emoji}</span>
-                <span className="charm-cell-name">{c.name}</span>
+                {t}
               </button>
             ))}
           </div>
-          <div className="menu-divider" />
-          <p className="menu-label">or type your own</p>
-          <div className="menu-custom">
-            <input
-              value={customEmoji}
-              placeholder="😀"
-              maxLength={4}
-              // The overlay window never takes keyboard focus on its own
-              // (borderless accessory panel) — typing went to the app behind.
-              // Clicking the field explicitly makes our window key.
-              onPointerDown={() => invoke("focus_window").catch(() => {})}
-              onChange={(e) => setCustomEmoji(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && applyCustomEmoji()}
-            />
-            <button className="menu-set" onClick={applyCustomEmoji}>
-              Set
-            </button>
-          </div>
-          <div className="menu-divider" />
-          <p className="menu-label">settings</p>
-          <div className="menu-settings">
-            <div className="setting-row">
-              <span className="setting-name">Size</span>
-              <div className="size-options">
-                {(Object.keys(SIZE_PX) as CharmSize[]).map((s) => (
+
+          {menuTab === "look" && (
+            <>
+              <p className="menu-label">companions</p>
+              <div className="companion-row">
+                <button
+                  className={`companion-card ${companion.kind === "charm" ? "active" : ""}`}
+                  onClick={() => chooseCompanion({ kind: "charm" })}
+                >
+                  <span className="companion-thumb">
+                    <CharmGlyph charm={charm} size={30} />
+                  </span>
+                  <span className="companion-name">Classic charm</span>
+                  <span className="companion-desc">Your lucky charm on its thread, right where you left it.</span>
+                  <span className="companion-action">Hang it up</span>
+                </button>
+                {COMPANIONS.map((c) => {
+                  const isActive = companion.kind === "companion" && companion.id === c.id;
+                  const activeVariant =
+                    companion.kind === "companion" && companion.id === c.id
+                      ? (companion.variantId ?? c.variants?.[0]?.id)
+                      : undefined;
+                  return (
+                    <button
+                      key={c.id}
+                      className={`companion-card ${isActive ? "active" : ""}`}
+                      onClick={() =>
+                        // Re-clicking the active card keeps its chosen color.
+                        chooseCompanion({ kind: "companion", id: c.id, variantId: activeVariant })
+                      }
+                    >
+                      <span className="companion-thumb">
+                        {c.id === "bluebird" ? <BirdGlyph size={30} /> : <span className="companion-emoji">{c.emoji}</span>}
+                      </span>
+                      <span className="companion-name">{c.name}</span>
+                      {c.variants && (
+                        <span className="variant-dots">
+                          {c.variants.map((v) => (
+                            <span
+                              key={v.id}
+                              role="button"
+                              title={v.label}
+                              className={`variant-dot ${isActive && activeVariant === v.id ? "active" : ""}`}
+                              style={{ background: v.swatch }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                chooseCompanion({ kind: "companion", id: c.id, variantId: v.id });
+                              }}
+                            />
+                          ))}
+                        </span>
+                      )}
+                      <span className="companion-desc">{c.description}</span>
+                      <span className="companion-action">{c.actionLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="menu-divider" />
+              <p className="menu-label">choose a charm</p>
+              <div className="charm-grid">
+                {DEFAULT_CHARMS.map((c) => (
                   <button
-                    key={s}
-                    className={`size-btn ${settings.size === s ? "active" : ""}`}
-                    title={s}
-                    onClick={() => setSettings((prev) => ({ ...prev, size: s }))}
+                    key={c.id}
+                    className={`charm-cell ${companion.kind === "charm" && c.id === charm.id ? "active" : ""}`}
+                    title={c.name}
+                    onClick={() => chooseCharm(c)}
                   >
-                    {s.charAt(0).toUpperCase()}
+                    <span className="charm-cell-emoji">{c.emoji}</span>
+                    <span className="charm-cell-name">{c.name}</span>
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="setting-row">
-              <span className="setting-name">Idle sway</span>
-              <button
-                className={`toggle ${settings.windEnabled ? "on" : ""}`}
-                aria-pressed={settings.windEnabled}
-                onClick={() => setSettings((prev) => ({ ...prev, windEnabled: !prev.windEnabled }))}
-              >
-                <span className="toggle-knob" />
+              <div className="menu-divider" />
+              <p className="menu-label">or type your own</p>
+              <div className="menu-custom">
+                <input
+                  value={customEmoji}
+                  placeholder="😀"
+                  maxLength={4}
+                  // The overlay window never takes keyboard focus on its own
+                  // (borderless accessory panel) — typing went to the app behind.
+                  // Clicking the field explicitly makes our window key.
+                  onPointerDown={() => invoke("focus_window").catch(() => {})}
+                  onChange={(e) => setCustomEmoji(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && applyCustomEmoji()}
+                />
+                <button className="menu-set" onClick={applyCustomEmoji}>
+                  Set
+                </button>
+              </div>
+            </>
+          )}
+
+          {menuTab === "reminders" && <RemindersPanel api={reminders} />}
+
+          {menuTab === "settings" && (
+            <div className="menu-settings">
+              <div className="setting-row">
+                <span className="setting-name">Size</span>
+                <div className="size-options">
+                  {(Object.keys(SIZE_PX) as CharmSize[]).map((s) => (
+                    <button
+                      key={s}
+                      className={`size-btn ${settings.size === s ? "active" : ""}`}
+                      title={s}
+                      onClick={() => setSettings((prev) => ({ ...prev, size: s }))}
+                    >
+                      {s.charAt(0).toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="setting-row">
+                <span className="setting-name">Idle sway</span>
+                <button
+                  className={`toggle ${settings.windEnabled ? "on" : ""}`}
+                  aria-pressed={settings.windEnabled}
+                  onClick={() => setSettings((prev) => ({ ...prev, windEnabled: !prev.windEnabled }))}
+                >
+                  <span className="toggle-knob" />
+                </button>
+              </div>
+              <div className={`setting-row ${settings.windEnabled ? "" : "dimmed"}`}>
+                <span className="setting-name">Sway strength</span>
+                <input
+                  type="range"
+                  min={0.2}
+                  max={2}
+                  step={0.1}
+                  value={settings.windIntensity}
+                  disabled={!settings.windEnabled}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, windIntensity: Number(e.target.value) }))}
+                />
+              </div>
+              <button className="menu-move" onClick={beginMove}>
+                Move hanging spot
               </button>
+
+              <div className="menu-divider" />
+              <div className="setting-row">
+                <span className="setting-name">Launch at login</span>
+                <button
+                  className={`toggle ${settings.launchAtLogin ? "on" : ""}`}
+                  aria-pressed={settings.launchAtLogin}
+                  onClick={toggleLaunchAtLogin}
+                >
+                  <span className="toggle-knob" />
+                </button>
+              </div>
+              <p className="setting-hint">
+                {autostart.actual === null
+                  ? "Starts with your computer so the reminders are always on duty."
+                  : autostart.actual
+                    ? "Registered with the system — Danglings opens when you sign in."
+                    : "Not registered — you'll open Danglings yourself."}
+              </p>
+
+              <div className="menu-divider" />
+              <div className="setting-row">
+                <span className="setting-name">Version {updater.currentVersion}</span>
+                <button
+                  className="mini-btn"
+                  disabled={updater.state.phase === "checking"}
+                  onClick={() => updater.checkNow(true)}
+                >
+                  Check for updates
+                </button>
+              </div>
+              <div className="setting-row">
+                <span className="setting-name">Check automatically</span>
+                <button
+                  className={`toggle ${settings.autoUpdate ? "on" : ""}`}
+                  aria-pressed={settings.autoUpdate}
+                  onClick={() => setSettings((prev) => ({ ...prev, autoUpdate: !prev.autoUpdate }))}
+                >
+                  <span className="toggle-knob" />
+                </button>
+              </div>
+              <p className={`setting-hint ${updateHint.cls}`}>{updateHint.text}</p>
             </div>
-            <div className={`setting-row ${settings.windEnabled ? "" : "dimmed"}`}>
-              <span className="setting-name">Sway strength</span>
-              <input
-                type="range"
-                min={0.2}
-                max={2}
-                step={0.1}
-                value={settings.windIntensity}
-                disabled={!settings.windEnabled}
-                onChange={(e) => setSettings((prev) => ({ ...prev, windIntensity: Number(e.target.value) }))}
-              />
-            </div>
-            <button className="menu-move" onClick={beginMove}>
-              Move hanging spot
-            </button>
-          </div>
+          )}
         </div>
       )}
     </div>

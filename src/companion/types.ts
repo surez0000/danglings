@@ -98,7 +98,7 @@ export const COMPANIONS: CompanionDef[] = [
     id: "bluebird",
     name: "Blue Bird",
     description:
-      "A little blue watcher on a swing. It follows your cursor, flutters when you get close, and dozes off when you work.",
+      "A little blue watcher on a swing. It follows your cursor, chirps when you say hi, and dozes off when you work.",
     actionLabel: "Say hi",
     packId: "core",
     free: true,

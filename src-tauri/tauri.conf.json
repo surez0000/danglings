@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Danglings",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.danglings.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -27,7 +27,8 @@
         "shadow": false,
         "center": false,
         "focus": false,
-        "visible": false
+        "visible": false,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required"
       }
     ],
     "security": {
@@ -48,6 +49,21 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true,
+    "shortDescription": "Tiny lucky charms and companions that dangle from the top of your screen.",
+    "longDescription": "A transparent, always-on-top desk companion: a lucky charm or a 3D creature on a swing that watches your cursor, plus gentle desk-time reminders to drink water, move, and rest your eyes.",
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "12.0"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFFNjZDMkVDNkJGMkI3RUMKUldUc3QvSnI3TUptSHJYVTc5dTVkaVp1MFhFRm9hUzNFOUFISEdRTW4vdjNHOEQwUDdqbFEwYWIK",
+      "endpoints": [
+        "https://github.com/surez0000/danglings/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
