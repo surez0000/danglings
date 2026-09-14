@@ -15,6 +15,7 @@ import {
   RENDER_INTERVAL_MS,
   SLEEP_FRAMES,
   WIND_WAKE_WINDOW_MS,
+  companionBoneHints,
   companionModelUrl,
   companionSpec,
   type CompanionId,
@@ -310,6 +311,9 @@ export default function BirdCompanion(props: BirdCompanionProps) {
     // Chirp audio plays at gesture time (WebKit audio gate needs the real
     // click); flutter has no mapped sound yet.
     if (result.sfx === "peck") playPeck();
+    // Humanoids with baked clips act out reactions (thumbs-up, dodge).
+    if (result.sfx === "chirp") sceneRef.current?.setAction("chirp");
+    if (result.sfx === "flutter") sceneRef.current?.setAction("flutter");
 
     const tilt = swingTilt(anchorX, anchorY, seat, s.attach);
 
@@ -325,7 +329,11 @@ export default function BirdCompanion(props: BirdCompanionProps) {
     const scene = sceneRef.current;
     if (
       scene &&
-      (result.wantsRender || seat.energy > ENERGY_SLEEP || dragRef.current !== null) &&
+      (result.wantsRender ||
+        seat.energy > ENERGY_SLEEP ||
+        dragRef.current !== null ||
+        // A baked idle clip keeps animating whenever the companion is awake.
+        (scene.hasClips() && behavior.state !== "doze")) &&
       now - lastRenderTsRef.current >= interval
     ) {
       // Seat mode tilts in-scene (lights stay world-stable, model leans into
@@ -360,10 +368,15 @@ export default function BirdCompanion(props: BirdCompanionProps) {
                 result.tailWag > 0
                   ? result.tailWag * 0.3 * Math.sin(2 * Math.PI * 3 * (now / 1000))
                   : 0,
+              earWiggle:
+                result.flapAmp > 0 || result.tailWag > 0
+                  ? (result.flapAmp * 0.3 + result.tailWag * 0.15) *
+                    Math.sin(2 * Math.PI * 7 * (now / 1000))
+                  : 0,
             }
           : undefined,
       );
-      scene.render();
+      scene.render((now - lastRenderTsRef.current) / 1000);
       lastRenderTsRef.current = now;
     }
 
@@ -480,6 +493,8 @@ export default function BirdCompanion(props: BirdCompanionProps) {
         const sp = companionSpec(d, propsRef.current.size);
         await scene.configure({
           url: companionModelUrl(d, propsRef.current.variantId),
+          boneHints: companionBoneHints(d, propsRef.current.variantId),
+          clips: d.clips,
           attach: sp.attach,
           canvasW: sp.canvasW,
           canvasH: sp.canvasH,

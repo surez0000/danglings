@@ -1,9 +1,12 @@
 import {
   ACESFilmicToneMapping,
+  AnimationMixer,
   Box3,
   DirectionalLight,
   Group,
   HemisphereLight,
+  LoopOnce,
+  LoopRepeat,
   Matrix4,
   Mesh,
   OrthographicCamera,
@@ -14,6 +17,8 @@ import {
   SRGBColorSpace,
   Vector3,
   WebGLRenderer,
+  type AnimationAction,
+  type AnimationClip,
   type Bone,
   type Material,
   type Object3D,
@@ -22,7 +27,13 @@ import {
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { DPR_CAP, HANG_ANCHOR_FRAC, SEAT_ANCHOR_FRAC, type CompanionAttach } from "./types";
+import {
+  DPR_CAP,
+  HANG_ANCHOR_FRAC,
+  SEAT_ANCHOR_FRAC,
+  type CompanionAttach,
+  type CompanionDef,
+} from "./types";
 import type { BirdPose } from "./birdBehavior";
 
 export type { BirdPose };
@@ -36,6 +47,12 @@ export type SceneDims = { canvasW: number; canvasH: number; modelPx: number };
 export type CompanionSceneOpts = SceneDims & {
   url: string;
   attach: CompanionAttach;
+  /* Pipeline-provided bone names per role — override the positional heuristics
+     (Meshy bones are anonymous, roles were classified offline per model). */
+  boneHints?: CompanionDef["boneHints"];
+  /* One-shot reaction clip URLs (humanoids); the base model's first baked clip
+     loops as idle. */
+  clips?: CompanionDef["clips"];
 };
 
 /* Per-frame bone targets for rigged models — final angles in radians, computed
@@ -45,6 +62,7 @@ export type RigPose = {
   headPitch: number;
   flapAngle: number;
   wagAngle: number;
+  earWiggle: number;
 };
 
 export type BirdScene = {
@@ -58,8 +76,12 @@ export type BirdScene = {
   /* True when the current model carries a usable skeleton (a head bone was
      found) — the caller then sends RigPose and damps whole-body rotation. */
   hasRig(): boolean;
+  /* True when the model has baked clips (mixer active) — the caller triggers
+     one-shot reactions via setAction and must pass dt to render. */
+  hasClips(): boolean;
+  setAction(action: "chirp" | "flutter"): void;
   setPose(p: BirdPose, rig?: RigPose): void;
-  render(): void;
+  render(dtSec?: number): void;
   setSize(dims: SceneDims, dpr: number): void;
   dispose(): void;
 };
@@ -75,13 +97,21 @@ type BoneCtl = {
   axZ: Vector3;
 };
 
-type Rig = { head: BoneCtl | null; wingL: BoneCtl | null; wingR: BoneCtl | null; tail: BoneCtl | null };
+type Rig = {
+  head: BoneCtl | null;
+  wingL: BoneCtl | null;
+  wingR: BoneCtl | null;
+  tail: BoneCtl | null;
+  earL: BoneCtl | null;
+  earR: BoneCtl | null;
+};
 
 /* Meshy auto-rigs ship anonymous bones (Bone_000…), so joints are identified
    by their position in the normalized model (height 1, feet at y=0, centered):
    head = highest near-center bone, wings = the innermost bone of each lateral
-   chain, tail = rear-most central bone (the model faces +z). */
-function detectRig(model: Object3D): Rig | null {
+   chain, tail = rear-most central bone (the model faces +z). Pipeline-supplied
+   boneHints (per-model offline analysis) take precedence over every heuristic. */
+function detectRig(model: Object3D, hints?: CompanionDef["boneHints"]): Rig | null {
   const bones: Bone[] = [];
   model.traverse((o) => {
     if ((o as Bone).isBone) bones.push(o as Bone);
@@ -89,6 +119,9 @@ function detectRig(model: Object3D): Rig | null {
   if (bones.length === 0) return null;
   model.updateMatrixWorld(true);
   const pos = new Map<Bone, Vector3>(bones.map((b) => [b, b.getWorldPosition(new Vector3())]));
+  const byName = new Map<string, Bone>(bones.map((b) => [b.name, b]));
+  const hinted = (role: keyof NonNullable<CompanionDef["boneHints"]>): Bone | null =>
+    hints?.[role] ? (byName.get(hints[role]!) ?? null) : null;
 
   /* Auto-rig chains end in weightless leaf joints (pure end-markers): rotating
      them moves nothing. When a pick is a leaf, step to its parent — that's the
@@ -103,9 +136,11 @@ function detectRig(model: Object3D): Rig | null {
   };
 
   const central = bones.filter((b) => Math.abs(pos.get(b)!.x) < 0.15);
-  const head = toWeighted(
-    central.filter((b) => pos.get(b)!.y > 0.4).sort((a, b) => pos.get(b)!.y - pos.get(a)!.y)[0] ?? null,
-  );
+  const head =
+    hinted("head") ??
+    toWeighted(
+      central.filter((b) => pos.get(b)!.y > 0.4).sort((a, b) => pos.get(b)!.y - pos.get(a)!.y)[0] ?? null,
+    );
   if (!head) return null;
 
   const wingRoot = (sign: number): Bone | null =>
@@ -113,11 +148,18 @@ function detectRig(model: Object3D): Rig | null {
       .filter((b) => sign * pos.get(b)!.x > 0.08 && pos.get(b)!.y > 0.25)
       .sort((a, b) => Math.abs(pos.get(a)!.x) - Math.abs(pos.get(b)!.x))[0] ?? null;
 
-  const tail = toWeighted(
-    central
-      .filter((b) => b !== head && pos.get(b)!.z < -0.1)
-      .sort((a, b) => pos.get(a)!.z - pos.get(b)!.z)[0] ?? null,
-  );
+  const tail =
+    hinted("tail") ??
+    toWeighted(
+      central
+        .filter((b) => b !== head && pos.get(b)!.z < -0.1)
+        .sort((a, b) => pos.get(a)!.z - pos.get(b)!.z)[0] ?? null,
+    );
+
+  /* Ears only come from hints — the heuristic space (near-head lateral pairs)
+     overlaps wings/arms too much to guess safely. */
+  const earL = hinted("earL");
+  const earR = hinted("earR");
 
   const ctl = (bone: Bone | null): BoneCtl | null => {
     if (!bone || !bone.parent) return null;
@@ -136,7 +178,14 @@ function detectRig(model: Object3D): Rig | null {
     };
   };
 
-  return { head: ctl(head), wingL: ctl(wingRoot(-1)), wingR: ctl(wingRoot(1)), tail: ctl(tail) };
+  return {
+    head: ctl(head),
+    wingL: ctl(hinted("wingL") ?? wingRoot(-1)),
+    wingR: ctl(hinted("wingR") ?? wingRoot(1)),
+    tail: ctl(tail),
+    earL: ctl(earL),
+    earR: ctl(earR),
+  };
 }
 
 const loader = new GLTFLoader();
@@ -252,43 +301,60 @@ export async function createBirdScene(canvas: HTMLCanvasElement): Promise<BirdSc
   const birdGroup = new Group();
   scene.add(birdGroup);
   let currentModel: Object3D | null = null;
+  let currentUrl = "";
   let rig: Rig | null = null;
   let pose: BirdPose = { yaw: 0, pitch: 0, roll: 0, offsetY: 0, scaleX: 1, scaleY: 1 };
   let rigPose: RigPose | null = null;
+  let mixer: AnimationMixer | null = null;
+  let idleAction: AnimationAction | null = null;
+  const clipMap: Partial<Record<"chirp" | "flutter", AnimationClip>> = {};
 
   let disposed = false;
   let configureToken = 0;
 
   const qScratch = new Quaternion();
-  const applyPose = () => {
+  const applyGroupPose = () => {
     birdGroup.rotation.set(pose.pitch, pose.yaw, pose.roll);
     birdGroup.position.y = pivotY + pose.offsetY;
     birdGroup.scale.set(pose.scaleX, pose.scaleY, pose.scaleX);
+  };
+
+  /* Bone offsets. Static rigs compose onto the stored REST orientation
+     (deterministic, no accumulation). Mixer-driven rigs instead premultiply
+     onto whatever the clip just wrote — mixer.update() rewrites the bone
+     quaternions every update, so nothing accumulates and head tracking rides
+     on top of the playing animation. */
+  const applyBonePose = () => {
     if (!rig || !rigPose) return;
-    const { head, wingL, wingR, tail } = rig;
+    const animated = mixer !== null;
+    const rotate = (c: BoneCtl | null, axis: "axX" | "axY" | "axZ", angle: number) => {
+      if (!c) return;
+      // Static rigs reset to rest every frame — a decayed-to-zero angle must
+      // not leave last frame's rotation stuck on the bone.
+      if (!animated) c.bone.quaternion.copy(c.rest);
+      if (angle !== 0) c.bone.quaternion.premultiply(qScratch.setFromAxisAngle(c[axis], angle));
+    };
+    const { head, wingL, wingR, tail, earL, earR } = rig;
     if (head) {
+      if (!animated) head.bone.quaternion.copy(head.rest);
       head.bone.quaternion
-        .copy(head.rest)
         .premultiply(qScratch.setFromAxisAngle(head.axX, rigPose.headPitch))
         .premultiply(qScratch.setFromAxisAngle(head.axY, rigPose.headYaw));
     }
-    // Rotating around the model's forward (z) axis sweeps wings up/down;
-    // opposite signs so both wings rise together.
-    if (wingL) {
-      wingL.bone.quaternion
-        .copy(wingL.rest)
-        .premultiply(qScratch.setFromAxisAngle(wingL.axZ, -rigPose.flapAngle));
-    }
-    if (wingR) {
-      wingR.bone.quaternion
-        .copy(wingR.rest)
-        .premultiply(qScratch.setFromAxisAngle(wingR.axZ, rigPose.flapAngle));
-    }
-    if (tail) {
-      tail.bone.quaternion
-        .copy(tail.rest)
-        .premultiply(qScratch.setFromAxisAngle(tail.axY, rigPose.wagAngle));
-    }
+    // Rotating around the model's forward (z) axis sweeps wings up/down
+    // (opposite signs so both rise together); the same axis splays the ears.
+    rotate(wingL, "axZ", -rigPose.flapAngle);
+    rotate(wingR, "axZ", rigPose.flapAngle);
+    rotate(tail, "axY", rigPose.wagAngle);
+    rotate(earL, "axZ", -rigPose.earWiggle);
+    rotate(earR, "axZ", rigPose.earWiggle);
+  };
+
+  const doRender = (dtSec: number) => {
+    if (mixer) mixer.update(Math.min(Math.max(dtSec, 0), 0.1));
+    applyGroupPose();
+    applyBonePose();
+    renderer.render(scene, camera);
   };
 
   /* WKWebView loses the GL context on GPU switches / memory pressure. Keep the
@@ -313,6 +379,7 @@ export async function createBirdScene(canvas: HTMLCanvasElement): Promise<BirdSc
   return {
     async configure(opts: CompanionSceneOpts) {
       const token = ++configureToken;
+      if (currentModel && opts.url === currentUrl) return; // same model, nothing to do
       await MeshoptDecoder.ready;
       const gltf = await loader.loadAsync(opts.url);
       if (disposed || token !== configureToken) {
@@ -338,7 +405,7 @@ export async function createBirdScene(canvas: HTMLCanvasElement): Promise<BirdSc
 
       /* Detect the skeleton while the model still sits in normalized space
          (feet at y=0), before the pivot offset shifts it. */
-      const nextRig = detectRig(model);
+      const nextRig = detectRig(model, opts.boneHints);
       model.traverse((o) => {
         // Bones move the mesh outside its static bounds — never cull it away.
         if (o instanceof SkinnedMesh) o.frustumCulled = false;
@@ -353,26 +420,72 @@ export async function createBirdScene(canvas: HTMLCanvasElement): Promise<BirdSc
         disposeRoot(currentModel);
       }
       currentModel = model;
+      currentUrl = opts.url;
       rig = nextRig;
       rigPose = null;
       birdGroup.add(model);
 
+      /* Baked clips: the base model's first clip loops as idle; reaction clips
+         come from sibling GLBs — take their AnimationClip (tracks retarget by
+         bone NAME, identical across exports of the same character) and discard
+         their meshes. */
+      mixer?.stopAllAction();
+      mixer = null;
+      idleAction = null;
+      delete clipMap.chirp;
+      delete clipMap.flutter;
+      if (gltf.animations.length > 0) {
+        mixer = new AnimationMixer(model);
+        idleAction = mixer.clipAction(gltf.animations[0]);
+        idleAction.setLoop(LoopRepeat, Infinity);
+        idleAction.play();
+        mixer.addEventListener("finished", (e) => {
+          (e.action as AnimationAction).fadeOut(0.25);
+          idleAction?.reset().fadeIn(0.25).play();
+        });
+        const clipEntries = Object.entries(opts.clips ?? {}) as ["chirp" | "flutter", string][];
+        void Promise.all(
+          clipEntries.map(async ([action, url]) => {
+            try {
+              const clipGltf = await loader.loadAsync(url);
+              if (!disposed && token === configureToken && clipGltf.animations[0]) {
+                clipMap[action] = clipGltf.animations[0];
+              }
+              disposeRoot(clipGltf.scene);
+            } catch {
+              // reaction clip failed to load — companion still works with idle only
+            }
+          }),
+        );
+      }
+
       dims = { canvasW: opts.canvasW, canvasH: opts.canvasH, modelPx: opts.modelPx };
       renderer.setSize(dims.canvasW, dims.canvasH, false);
       applyFrustum(camera, attach, dims);
-      applyPose();
-      renderer.render(scene, camera);
+      doRender(0);
     },
     hasRig() {
       return !!rig?.head;
     },
+    hasClips() {
+      return mixer !== null;
+    },
+    setAction(action: "chirp" | "flutter") {
+      const clip = mixer ? clipMap[action] : undefined;
+      if (!mixer || !clip || !idleAction) return;
+      const a = mixer.clipAction(clip);
+      a.reset();
+      a.setLoop(LoopOnce, 1);
+      a.clampWhenFinished = false;
+      idleAction.fadeOut(0.15);
+      a.fadeIn(0.15).play();
+    },
     setPose(p: BirdPose, r?: RigPose) {
       pose = p;
       rigPose = r ?? null;
-      applyPose();
     },
-    render() {
-      renderer.render(scene, camera);
+    render(dtSec?: number) {
+      doRender(dtSec ?? 1 / 60);
     },
     setSize(nextDims: SceneDims, nextDpr: number) {
       dims = nextDims;

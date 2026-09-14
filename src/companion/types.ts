@@ -1,20 +1,39 @@
 import type { CharmSize } from "../App";
 
-export type CompanionId = "bluebird" | "monkey" | "panda" | "chameleon" | "swinger" | "elephant" | "kitty";
+export type CompanionId =
+  | "bluebird"
+  | "monkey"
+  | "elephant"
+  | "kitten"
+  | "leopard"
+  | "fox"
+  | "tiger"
+  | "chipmunk"
+  | "rabbit"
+  | "bunny"
+  | "owlet"
+  | "professor"
+  | "mia"
+  | "riko";
 
 export type CompanionSelection =
   | { kind: "charm" }
   | { kind: "companion"; id: CompanionId; variantId?: string };
 
-/* A color variant: same character, same rig-less geometry class, different
-   texture/model file. The picker shows one card per companion with a swatch
-   dot per variant. */
+export type BoneHints = Partial<
+  Record<"head" | "tail" | "earL" | "earR" | "wingL" | "wingR", string>
+>;
+
+/* A color variant: same character, different model file. Meshy re-rigs every
+   variant, so bone NAMES differ between variants of one family — hints are
+   therefore per-variant, falling back to the family default. */
 export type CompanionVariant = {
   id: string;
   label: string;
   /* CSS color for the picker dot. */
   swatch: string;
   modelUrl: string;
+  boneHints?: BoneHints;
 };
 
 /* seat: sits on the physics swing (two cords + seat bar).
@@ -53,12 +72,24 @@ export type CompanionDef = {
   /* Color variants; the first one is the default. modelUrl above is the
      fallback when variants is absent. */
   variants?: CompanionVariant[];
+  /* Bone names per rig role, produced by the asset-pipeline analysis (Meshy
+     bones are anonymous, so heuristics guess — hints override per model). */
+  boneHints?: BoneHints;
+  /* Baked animation clips (humanoids): the base model carries the looping idle
+     clip; these URLs hold one-shot reaction clips retargeted at runtime. */
+  clips?: Partial<Record<"chirp" | "flutter", string>>;
 };
 
 export function companionModelUrl(def: CompanionDef, variantId?: string): string {
   if (!def.variants || def.variants.length === 0) return def.modelUrl;
   const v = def.variants.find((x) => x.id === variantId);
   return (v ?? def.variants[0]).modelUrl;
+}
+
+export function companionBoneHints(def: CompanionDef, variantId?: string): BoneHints | undefined {
+  if (!def.variants || def.variants.length === 0) return def.boneHints;
+  const v = def.variants.find((x) => x.id === variantId) ?? def.variants[0];
+  return v.boneHints ?? def.boneHints;
 }
 
 /* Registry of shipped companions; packs later slice this by packId. */
@@ -84,13 +115,13 @@ export const COMPANIONS: CompanionDef[] = [
   },
   {
     id: "monkey",
-    name: "Monkey",
+    name: "Momo the Monkey",
     description:
-      "A cheeky pink-haired monkey that perches on the swing and tracks your every move, tail curled for balance.",
+      "A cheeky little monkey with a fully rigged tail, perched on the swing and tracking your every move.",
     actionLabel: "Make it grin",
     packId: "core",
     free: true,
-    modelUrl: "/companions/monkey.glb",
+    modelUrl: "/companions/monkey-classic.glb",
     wantsCursor: true,
     emoji: "🐒",
     attach: "seat",
@@ -101,102 +132,45 @@ export const COMPANIONS: CompanionDef[] = [
     pitchMul: 0.8,
     bobMul: 0.7,
     variants: [
-      { id: "classic", label: "Classic", swatch: "#7a4a3c", modelUrl: "/companions/monkey.glb" },
-      { id: "snowy", label: "Snowy", swatch: "#e8e2dc", modelUrl: "/companions/monkey-b.glb" },
-      { id: "cocoa", label: "Cocoa", swatch: "#4c3a34", modelUrl: "/companions/monkey-c.glb" },
+      { id: "classic", label: "Classic", swatch: "#b76e79", modelUrl: "/companions/monkey-classic.glb", boneHints: { head: "Bone_032", tail: "Bone_020", wingL: "Bone_025", wingR: "Bone_030" } },
+      { id: "snowy", label: "Snowy", swatch: "#e8e2dc", modelUrl: "/companions/monkey-snowy.glb", boneHints: { head: "Bone_033", tail: "Bone_021", wingL: "Bone_026", wingR: "Bone_031" } },
+      { id: "cream", label: "Cream", swatch: "#d8c4a8", modelUrl: "/companions/monkey-cream.glb", boneHints: { head: "Bone_033", tail: "Bone_021", wingL: "Bone_026", wingR: "Bone_031" } },
     ],
-  },
-  {
-    id: "panda",
-    name: "Rope Panda",
-    description:
-      "Slides down its own rope with a lucky smiley in paw, keeping an eye on whatever you're up to.",
-    actionLabel: "Give the rope a tug",
-    packId: "core",
-    free: true,
-    modelUrl: "/companions/panda.glb",
-    wantsCursor: true,
-    emoji: "🐼",
-    attach: "hang",
-    aspect: 0.26,
-    heightPx: { small: 170, medium: 230, large: 300 },
-    focusFrac: 0.55,
-    yawClamp: 0.45,
-    pitchMul: 0.3,
-    bobMul: 0.25,
-  },
-  {
-    id: "chameleon",
-    name: "Chameleon",
-    description:
-      "Clings to the line in its little red scarf and swivels those big eyes wherever your cursor goes.",
-    actionLabel: "Catch its eye",
-    packId: "core",
-    free: true,
-    modelUrl: "/companions/chameleon.glb",
-    wantsCursor: true,
-    emoji: "🦎",
-    attach: "hang",
-    aspect: 0.29,
-    heightPx: { small: 160, medium: 220, large: 290 },
-    focusFrac: 0.72,
-    yawClamp: 0.4,
-    pitchMul: 0.25,
-    bobMul: 0.2,
-  },
-  {
-    id: "swinger",
-    name: "Vine Swinger",
-    description:
-      "A wide-eyed chameleon on a flowered vine swing, kicking along happily with the breeze.",
-    actionLabel: "Push the swing",
-    packId: "core",
-    free: true,
-    modelUrl: "/companions/swinger.glb",
-    wantsCursor: true,
-    emoji: "🌿",
-    attach: "hang",
-    aspect: 0.48,
-    heightPx: { small: 150, medium: 210, large: 280 },
-    focusFrac: 0.6,
-    yawClamp: 0.5,
-    pitchMul: 0.3,
-    bobMul: 0.3,
   },
   {
     id: "elephant",
     name: "Baby Elephant",
     description:
-      "A round little elephant that plants itself on the swing, ears out wide, watching everything you do.",
+      "A round baby elephant with rigged flappy ears, planted happily on the swing.",
     actionLabel: "Boop the trunk",
     packId: "core",
     free: true,
-    modelUrl: "/companions/elephant-a.glb",
+    modelUrl: "/companions/elephant-grey.glb",
     wantsCursor: true,
     emoji: "🐘",
     attach: "seat",
-    aspect: 1.06,
+    aspect: 1.07,
     heightPx: { small: 64, medium: 96, large: 128 },
-    focusFrac: 0.35,
+    focusFrac: 0.3,
     yawClamp: 0.45,
     pitchMul: 0.7,
     bobMul: 0.8,
     variants: [
-      { id: "grey", label: "Grey", swatch: "#9aa0a8", modelUrl: "/companions/elephant-a.glb" },
-      { id: "blue", label: "Blue", swatch: "#7d93b8", modelUrl: "/companions/elephant-b.glb" },
-      { id: "snow", label: "Snow", swatch: "#e9e6e7", modelUrl: "/companions/elephant-c.glb" },
-      { id: "pink", label: "Pink", swatch: "#d8a3b6", modelUrl: "/companions/elephant-d.glb" },
+      { id: "grey", label: "Grey", swatch: "#9aa0a8", modelUrl: "/companions/elephant-grey.glb", boneHints: { head: "Bone_021", earL: "Bone_050", earR: "Bone_047", tail: "Bone_005" } },
+      { id: "pink", label: "Pink", swatch: "#d8a3b6", modelUrl: "/companions/elephant-pink.glb", boneHints: { head: "Bone_021", earL: "Bone_050", earR: "Bone_048", tail: "Bone_005" } },
+      { id: "snow", label: "Snow", swatch: "#e9e6e7", modelUrl: "/companions/elephant-snow.glb", boneHints: { head: "Bone_021", earL: "Bone_053", earR: "Bone_050", tail: "Bone_005" } },
+      { id: "blue", label: "Blue", swatch: "#7d93b8", modelUrl: "/companions/elephant-blue.glb", boneHints: { head: "Bone_028", earL: "Bone_038", earR: "Bone_036", tail: "Bone_009" } },
     ],
   },
   {
-    id: "kitty",
-    name: "Snowflake Kitty",
+    id: "kitten",
+    name: "Kitten",
     description:
-      "A fluffy white kitten perched on the swing, tracking your cursor with those enormous eyes.",
+      "A chibi kitten with rigged ears and tail, following your cursor with enormous eyes.",
     actionLabel: "Pspsps",
     packId: "core",
     free: true,
-    modelUrl: "/companions/kitty.glb",
+    modelUrl: "/companions/kitten-cloud.glb",
     wantsCursor: true,
     emoji: "🐱",
     attach: "seat",
@@ -206,6 +180,215 @@ export const COMPANIONS: CompanionDef[] = [
     yawClamp: 0.55,
     pitchMul: 0.8,
     bobMul: 0.9,
+    variants: [
+      { id: "cloud", label: "Cloud", swatch: "#dfe3e8", modelUrl: "/companions/kitten-cloud.glb", boneHints: { head: "Bone_028", earL: "Bone_037", earR: "Bone_034", tail: "Bone_015" } },
+      { id: "tabby", label: "Tabby", swatch: "#e8973f", modelUrl: "/companions/kitten-tabby.glb", boneHints: { head: "Bone_021", earL: "Bone_048", earR: "Bone_045", tail: "Bone_015" } },
+    ],
+  },
+  {
+    id: "leopard",
+    name: "Leopard Cub",
+    description:
+      "A spotted cub in a pink bow, tail curled around the swing seat.",
+    actionLabel: "Straighten the bow",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/leopard-golden.glb",
+    wantsCursor: true,
+    emoji: "🐆",
+    attach: "seat",
+    aspect: 0.87,
+    heightPx: { small: 64, medium: 96, large: 128 },
+    focusFrac: 0.3,
+    yawClamp: 0.5,
+    pitchMul: 0.8,
+    bobMul: 0.8,
+    variants: [
+      { id: "golden", label: "Golden", swatch: "#d9a441", modelUrl: "/companions/leopard-golden.glb", boneHints: { head: "Bone_026", earL: "Bone_037", earR: "Bone_035", tail: "Bone_014", wingL: "Bone_025", wingR: "Bone_023" } },
+      { id: "snow", label: "Snow", swatch: "#e8e4df", modelUrl: "/companions/leopard-snow.glb", boneHints: { head: "Bone_026", tail: "Bone_020", wingL: "Bone_024", wingR: "Bone_022" } },
+    ],
+  },
+  {
+    id: "fox",
+    name: "Fox Kit",
+    description:
+      "An orange fox kit wrapped in its own fluffy rigged tail.",
+    actionLabel: "Fluff the tail",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/fox.glb",
+    wantsCursor: true,
+    emoji: "🦊",
+    attach: "seat",
+    aspect: 0.76,
+    heightPx: { small: 64, medium: 96, large: 128 },
+    focusFrac: 0.3,
+    yawClamp: 0.55,
+    pitchMul: 0.8,
+    bobMul: 0.8,
+    boneHints: { head: "Bone_024", tail: "Bone_020" },
+  },
+  {
+    id: "tiger",
+    name: "Tiger Cub",
+    description:
+      "A laughing tiger cub with rigged ears and a striped tail that swishes behind the seat.",
+    actionLabel: "Hear it roar",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/tiger.glb",
+    wantsCursor: true,
+    emoji: "🐯",
+    attach: "seat",
+    aspect: 0.85,
+    heightPx: { small: 64, medium: 96, large: 128 },
+    focusFrac: 0.3,
+    yawClamp: 0.5,
+    pitchMul: 0.8,
+    bobMul: 0.8,
+    boneHints: { head: "Bone_023 (node 15)", earL: "Bone_047 (node 11)", earR: "Bone_050 (node 14)", tail: "Bone_020 (node 48)" },
+  },
+  {
+    id: "chipmunk",
+    name: "Chipmunk",
+    description:
+      "A waving chipmunk with the richest rig of the fleet — 76 bones, tail included.",
+    actionLabel: "Wave hello",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/chipmunk.glb",
+    wantsCursor: true,
+    emoji: "🐿️",
+    attach: "seat",
+    aspect: 0.94,
+    heightPx: { small: 64, medium: 96, large: 128 },
+    focusFrac: 0.3,
+    yawClamp: 0.55,
+    pitchMul: 0.85,
+    bobMul: 0.8,
+    boneHints: { head: "Bone_024", wingL: "Bone_030", wingR: "Bone_035", tail: "Bone_022" },
+  },
+  {
+    id: "rabbit",
+    name: "Meadow Rabbit",
+    description:
+      "A tall standing rabbit with rigged ears, balancing on the swing and watching you work.",
+    actionLabel: "Twitch the ears",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/rabbit.glb",
+    wantsCursor: true,
+    emoji: "🐇",
+    attach: "seat",
+    aspect: 0.31,
+    heightPx: { small: 72, medium: 108, large: 144 },
+    focusFrac: 0.3,
+    yawClamp: 0.5,
+    pitchMul: 0.7,
+    bobMul: 0.5,
+    boneHints: { head: "Bone_010", earL: "Bone_026", earR: "Bone_029", wingL: "Bone_013", wingR: "Bone_015", tail: "Bone_003" },
+  },
+  {
+    id: "bunny",
+    name: "Chibi Bunny",
+    description:
+      "A tiny white bunny whose long rigged ears wiggle when it gets excited.",
+    actionLabel: "Wiggle the ears",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/bunny.glb",
+    wantsCursor: true,
+    emoji: "🐰",
+    attach: "seat",
+    aspect: 0.59,
+    heightPx: { small: 64, medium: 96, large: 128 },
+    focusFrac: 0.3,
+    yawClamp: 0.55,
+    pitchMul: 0.8,
+    bobMul: 0.9,
+    boneHints: { head: "Bone_008", earL: "Bone_017", earR: "Bone_019", wingL: "Bone_015", wingR: "Bone_012" },
+  },
+  {
+    id: "owlet",
+    name: "Owlet",
+    description:
+      "A grey baby owl with rigged wings and ear tufts, blinking down at your cursor.",
+    actionLabel: "Ruffle its feathers",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/owlet.glb",
+    wantsCursor: true,
+    emoji: "🦉",
+    attach: "seat",
+    aspect: 0.68,
+    heightPx: { small: 64, medium: 96, large: 128 },
+    focusFrac: 0.3,
+    yawClamp: 0.6,
+    pitchMul: 0.9,
+    bobMul: 0.9,
+    boneHints: { head: "Bone_020", earL: "Bone_051", earR: "Bone_053", wingL: "Bone_015", wingR: "Bone_019" },
+  },
+  {
+    id: "professor",
+    name: "Professor Finch",
+    description:
+      "A scholarly blue bird in round glasses, supervising your work from the swing.",
+    actionLabel: "Adjust the spectacles",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/professor.glb",
+    wantsCursor: true,
+    emoji: "🧐",
+    attach: "seat",
+    aspect: 0.74,
+    heightPx: { small: 64, medium: 96, large: 128 },
+    focusFrac: 0.3,
+    yawClamp: 0.6,
+    pitchMul: 0.9,
+    bobMul: 0.8,
+    boneHints: { head: "Bone_010", earL: "Bone_047", earR: "Bone_049", tail: "Bone_017" },
+  },
+  {
+    id: "mia",
+    name: "Mia",
+    description:
+      "A pigtailed girl who genuinely sits cross-legged on the swing — click her for a thumbs-up.",
+    actionLabel: "Thumbs up!",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/mia.glb",
+    wantsCursor: true,
+    emoji: "🎀",
+    attach: "seat",
+    aspect: 0.8,
+    heightPx: { small: 76, medium: 112, large: 148 },
+    focusFrac: 0.3,
+    yawClamp: 0.45,
+    pitchMul: 0.6,
+    bobMul: 0.4,
+    boneHints: { head: "Head", wingL: "LeftArm", wingR: "RightArm" },
+    clips: { chirp: "/companions/mia-chirp.glb" },
+  },
+  {
+    id: "riko",
+    name: "Riko",
+    description:
+      "A pink-haired kid in a hoodie, sitting cross-legged — dodges when your cursor rushes in.",
+    actionLabel: "Thumbs up!",
+    packId: "core",
+    free: true,
+    modelUrl: "/companions/riko.glb",
+    wantsCursor: true,
+    emoji: "🎧",
+    attach: "seat",
+    aspect: 0.87,
+    heightPx: { small: 76, medium: 112, large: 148 },
+    focusFrac: 0.3,
+    yawClamp: 0.45,
+    pitchMul: 0.6,
+    bobMul: 0.4,
+    boneHints: { head: "Head", wingL: "LeftArm", wingR: "RightArm" },
+    clips: { chirp: "/companions/riko-chirp.glb", flutter: "/companions/riko-flutter.glb" },
   },
 ];
 

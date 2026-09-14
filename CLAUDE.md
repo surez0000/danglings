@@ -40,12 +40,18 @@ that is click-through except near the charm. Tray menu + Shift+Alt+K toggle.
     look-at math, pose smoothing, doze vignettes.
   - `birdScene.ts` — three.js ortho scene + GLTF/meshopt/webp loader, context-loss recovery.
     The ONLY file that statically imports three; only ever loaded via dynamic import.
-    Rigged GLBs are auto-detected (Meshy bones are anonymous, so joints are found by
-    position in the normalized model: head = highest central, wings = lateral chain
-    roots, tail = rear-most central) and driven procedurally via RigPose — head-only
-    cursor tracking, wing flap, tail wag; unrigged models keep whole-body rotation.
-    Rigged asset pipeline: same optimize command, verify skins/joints survive
-    (bluebird.glb is rigged: 20 joints).
+    Rigged GLBs are auto-detected (Meshy bones are anonymous: heuristics by normalized
+    position, overridden by per-model/per-VARIANT `boneHints` from the offline pipeline
+    — Meshy re-rigs each color variant so bone names differ between variants!) and
+    driven procedurally via RigPose: head-only cursor tracking, wing flap, tail wag,
+    ear wiggle. Models with baked clips (mia/riko humanoids) run an AnimationMixer:
+    first clip loops as idle, `clips` URLs hold one-shot reactions (chirp/flutter)
+    retargeted by bone name; bone offsets premultiply ON TOP of the mixer output.
+    Rigged asset pipeline: scripts/analyze-rig.mjs reports bones/positions/animations
+    (NOTE: its normalized positions are degenerate on meshopt-quantized outputs —
+    classify roles from the RAW export, verify counts on the output). The whole fleet
+    (bluebird + 13 rigged families, 20 models + 3 clip files) lives in
+    public/companions/; raw exports in "Rigged models/" are gitignored.
   - `BirdCompanion.tsx` — bird-mode owner: fixed-timestep physics accumulator, render tiers,
     sleep/wake gates, hit-point sends, drag/click/context-menu surfaces, glyph fallback.
   - `BirdGlyph.tsx` — flat-cute SVG bird: picker thumbnail, GLB-loading placeholder, and
