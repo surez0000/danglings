@@ -95,7 +95,11 @@ that is click-through except near the charm. Tray menu + Shift+Alt+K toggle.
   `get_idle_seconds` returns OS seconds-since-last-input (CGEventSourceSecondsSinceLastEventType /
   GetLastInputInfo, permission-free) for the reminders' desk clock.
   The same thread powers the opt-in `cursor-moved` event stream (see Gotchas), and
-  `toggle_charm` emits `overlay-visibility` (bool) on both hide/show branches.
+  `toggle_charm` emits `overlay-visibility` (bool) on both hide/show branches. Tray menu:
+  Show/Hide · Move to Top Center · "Check for Updates…" (emits `check-updates`, showing the
+  overlay first) · a status `MenuItem` kept in managed state (`UpdateStatusItem`) that the
+  frontend rewrites via `set_update_status {text, actionable}` (clicking it when actionable
+  emits `install-update`) · Quit. macOS uses `brand/tray-template@2x.png` as a template icon.
 
 ### Bundle boundary (hard rule)
 

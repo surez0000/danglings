@@ -1,6 +1,6 @@
 [package]
 name = "danglings"
-version = "1.0.0"
+version = "1.0.1"
 description = "Tiny lucky charms and companions that dangle from the top of your screen"
 authors = ["surez0000"]
 edition = "2021"

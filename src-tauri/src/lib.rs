@@ -87,6 +87,17 @@ fn get_idle_seconds() -> f64 {
     idle_seconds()
 }
 
+/* The tray menu's status line ("Danglings 1.0.1 · up to date" / "Update to
+   1.0.2 now"). The frontend's updater owns the state machine and mirrors it
+   here; when `actionable` the item is enabled and clicking it installs. */
+struct UpdateStatusItem(MenuItem<tauri::Wry>);
+
+#[tauri::command]
+fn set_update_status(item: tauri::State<UpdateStatusItem>, text: String, actionable: bool) {
+    let _ = item.0.set_text(text);
+    let _ = item.0.set_enabled(actionable);
+}
+
 #[tauri::command]
 fn set_force_interactive(state: tauri::State<SharedHitState>, active: bool) {
     let mut s = state.lock().unwrap();
@@ -329,6 +340,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             update_hit_points,
             update_extra_hit_points,
+            set_update_status,
             set_force_interactive,
             set_cursor_stream,
             focus_window,
@@ -351,11 +363,27 @@ pub fn run() {
             let shortcut = Shortcut::new(Some(Modifiers::SHIFT | Modifiers::ALT), Code::KeyK);
             app.global_shortcut().register(shortcut)?;
 
-            let show_hide = MenuItem::with_id(app, "toggle", "Show/Hide Charm", true, None::<&str>)?;
+            let show_hide = MenuItem::with_id(app, "toggle", "Show/Hide Danglings", true, None::<&str>)?;
             let recenter = MenuItem::with_id(app, "recenter", "Move to Top Center", true, None::<&str>)?;
             let separator = PredefinedMenuItem::separator(app)?;
+            // Updates live in the tray too: a "Check for Updates…" action and a
+            // status line the frontend keeps current (disabled unless an update
+            // is ready, when clicking it installs).
+            let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates…", true, None::<&str>)?;
+            let update_status = MenuItem::with_id(
+                app,
+                "update_status",
+                format!("Danglings {}", app.package_info().version),
+                false,
+                None::<&str>,
+            )?;
+            let separator2 = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_hide, &recenter, &separator, &quit])?;
+            let menu = Menu::with_items(
+                app,
+                &[&show_hide, &recenter, &separator, &check_updates, &update_status, &separator2, &quit],
+            )?;
+            app.manage(UpdateStatusItem(update_status.clone()));
 
             // macOS menu bar wants a TEMPLATE image (black silhouette + alpha) so
             // it adapts to light/dark menu bars like every native status item;
@@ -380,6 +408,23 @@ pub fn run() {
                     "recenter" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.emit("recenter", ());
+                        }
+                    }
+                    "check_updates" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            // Bring the overlay back if hidden so the result bubble is seen.
+                            if !window.is_visible().unwrap_or(false) {
+                                toggle_charm(&window);
+                            }
+                            let _ = window.emit("check-updates", ());
+                        }
+                    }
+                    "update_status" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            if !window.is_visible().unwrap_or(false) {
+                                toggle_charm(&window);
+                            }
+                            let _ = window.emit("install-update", ());
                         }
                     }
                     "quit" => {

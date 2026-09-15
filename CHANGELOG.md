@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.1 — 2026-09-15
+
+**New look**
+- New app icon: the Danglings mark (a star charm dangling from the D) replaces the temporary logo on both platforms.
+- macOS menu-bar icon is now a proper template silhouette, so it follows light and dark menu bars.
+
+**Menu bar / tray**
+- "Check for Updates…" in the right-click menu, plus a status line that shows the installed version, "up to date", download progress, or "Update to x.y.z now" (click it to install). Checking from the tray also brings the overlay back if it was hidden.
+
+**Companions**
+- Companions no longer drag: pull-and-release stretched the swing cords and felt rubbery. Click still says hi, right-click still opens the menu, the swing still sways and settles on its own. "Move hanging spot" lives in the menu.
+- Mia and Riko retired (they were buggy). If one was selected, the Blue Bird takes over. Download is 3.4 MB smaller.
+
+**Website**
+- The landing page now renders the tabby kitten live with the app's own three.js scene and shows real renders of every companion.
+
 ## 1.0.0 — 2026-09-14
 
 First public release.

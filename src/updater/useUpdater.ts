@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { playUpdateChime } from "../sound";
@@ -153,6 +155,57 @@ export function useUpdater(autoCheck: boolean) {
       window.clearInterval(i);
     };
   }, [autoCheck, checkNow]);
+
+  // Tray menu: "Check for Updates…" and the clickable status line (Rust emits
+  // these; the overlay is shown first so the bubble is visible).
+  useEffect(() => {
+    const unA = listen("check-updates", () => {
+      checkNow(true);
+    }).catch(() => null);
+    const unB = listen("install-update", () => {
+      install();
+    }).catch(() => null);
+    return () => {
+      unA.then((f) => f?.());
+      unB.then((f) => f?.());
+    };
+  }, [checkNow, install]);
+
+  // Mirror the state machine into the tray's status item.
+  useEffect(() => {
+    let text: string;
+    let actionable = false;
+    switch (state.phase) {
+      case "checking":
+        text = "Checking for updates…";
+        break;
+      case "available":
+        text = `Update to ${state.version} now`;
+        actionable = true;
+        break;
+      case "downloading":
+        text =
+          state.progress == null
+            ? "Downloading update…"
+            : `Downloading update… ${Math.round(state.progress * 100)}%`;
+        break;
+      case "installing":
+        text = "Installing update…";
+        break;
+      case "restarting":
+        text = "Restarting…";
+        break;
+      case "upToDate":
+        text = `Danglings ${currentVersion} · up to date`;
+        break;
+      case "error":
+        text = state.fromInstall ? "Update didn't finish · try again from the menu" : "Update check failed";
+        break;
+      default:
+        text = `Danglings ${currentVersion}`;
+    }
+    invoke("set_update_status", { text, actionable }).catch(() => {});
+  }, [state, currentVersion]);
 
   return { state, currentVersion, checkNow, install, later, dismiss, devMock };
 }
