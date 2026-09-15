@@ -357,8 +357,18 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_hide, &recenter, &separator, &quit])?;
 
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+            // macOS menu bar wants a TEMPLATE image (black silhouette + alpha) so
+            // it adapts to light/dark menu bars like every native status item;
+            // Windows/Linux trays show the coloured app icon.
+            #[cfg(target_os = "macos")]
+            let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../../brand/tray-template@2x.png"))?;
+            #[cfg(not(target_os = "macos"))]
+            let tray_icon = app.default_window_icon().unwrap().clone();
+
+            let tray = TrayIconBuilder::new().icon(tray_icon);
+            #[cfg(target_os = "macos")]
+            let tray = tray.icon_as_template(true);
+            let _tray = tray
                 .menu(&menu)
                 .tooltip("Danglings — Shift+Alt+K to show/hide")
                 .on_menu_event(|app, event| match event.id.as_ref() {
