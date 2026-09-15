@@ -12,9 +12,7 @@ export type CompanionId =
   | "rabbit"
   | "bunny"
   | "owlet"
-  | "professor"
-  | "mia"
-  | "riko";
+  | "professor";
 
 export type CompanionSelection =
   | { kind: "charm" }
@@ -347,48 +345,6 @@ export const COMPANIONS: CompanionDef[] = [
     pitchMul: 0.9,
     bobMul: 0.8,
     boneHints: { head: "Bone_010", earL: "Bone_047", earR: "Bone_049", tail: "Bone_017" },
-  },
-  {
-    id: "mia",
-    name: "Mia",
-    description:
-      "A pigtailed girl who genuinely sits cross-legged on the swing — click her for a thumbs-up.",
-    actionLabel: "Thumbs up!",
-    packId: "core",
-    free: true,
-    modelUrl: "/companions/mia.glb",
-    wantsCursor: true,
-    emoji: "🎀",
-    attach: "seat",
-    aspect: 0.8,
-    heightPx: { small: 76, medium: 112, large: 148 },
-    focusFrac: 0.3,
-    yawClamp: 0.45,
-    pitchMul: 0.6,
-    bobMul: 0.4,
-    boneHints: { head: "Head", wingL: "LeftArm", wingR: "RightArm" },
-    clips: { chirp: "/companions/mia-chirp.glb" },
-  },
-  {
-    id: "riko",
-    name: "Riko",
-    description:
-      "A pink-haired kid in a hoodie, sitting cross-legged — dodges when your cursor rushes in.",
-    actionLabel: "Thumbs up!",
-    packId: "core",
-    free: true,
-    modelUrl: "/companions/riko.glb",
-    wantsCursor: true,
-    emoji: "🎧",
-    attach: "seat",
-    aspect: 0.87,
-    heightPx: { small: 76, medium: 112, large: 148 },
-    focusFrac: 0.3,
-    yawClamp: 0.45,
-    pitchMul: 0.6,
-    bobMul: 0.4,
-    boneHints: { head: "Head", wingL: "LeftArm", wingR: "RightArm" },
-    clips: { chirp: "/companions/riko-chirp.glb", flutter: "/companions/riko-flutter.glb" },
   },
 ];
 

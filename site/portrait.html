@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Danglings portrait renderer (dev)</title>
+<style>
+  body { margin: 0; background: #223; display: grid; place-items: center; min-height: 100vh; font: 13px ui-monospace, Menlo, monospace; color: #cde; }
+  #wrap { display: grid; gap: 10px; justify-items: center; }
+  canvas { width: 512px; height: 512px; background:
+    repeating-conic-gradient(#2a2a3a 0 25%, #303044 0 50%) 0 0 / 32px 32px; border: 1px solid #556; }
+  #status { opacity: .8; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="512" height="512"></canvas>
+  <div id="status">loading…</div>
+</div>
+<!-- Dev-only. Open through the app's dev server, which serves every model:
+     http://localhost:1420/site/portrait.html?model=kitten-tabby&yaw=0.35
+     Then read `await window.__portrait()` (a PNG data URL) and save it as
+     site/public/portraits/<model>.png. Not part of the site build. -->
+<script type="module" src="./portrait.ts"></script>
+</body>
+</html>

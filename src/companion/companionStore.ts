@@ -19,6 +19,8 @@ export function loadCompanion(): CompanionSelection {
               : undefined;
           return { kind: "companion", id: id as CompanionId, variantId: valid };
         }
+        // A retired companion (Mia/Riko left in 1.1) falls back to the bird.
+        if (kind === "companion") return { kind: "companion", id: "bluebird" };
         if (kind === "charm") return { kind: "charm" };
       }
     }

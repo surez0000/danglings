@@ -4,7 +4,6 @@ import { listen } from "@tauri-apps/api/event";
 import type { CharmSize } from "../App";
 import { playChirp, playPeck } from "../sound";
 import {
-  ACTIVE_AFTER_RELEASE_MS,
   COMPANION_BY_ID,
   ENERGY_SLEEP,
   FRAME_DT_CLAMP_MS,
@@ -601,31 +600,21 @@ export default function BirdCompanion(props: BirdCompanionProps) {
 
   // No stopPropagation on pointerdown: the stage's own handler closes an open
   // menu, which is exactly what a click on the model should do.
+  // Companions don't drag (1.1): pull-and-release stretched the Verlet cords
+  // and read as rubbery. A press is a click; the swing still sways with wind
+  // and settles by itself, and "Move hanging spot" lives in the menu.
   const onHitPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     (e.target as Element).setPointerCapture(e.pointerId);
-    dragRef.current = { x: e.clientX, y: e.clientY };
     downRef.current = { x: e.clientX, y: e.clientY };
-    propsRef.current.setForceInteractive(true);
     ensureLoop();
   };
 
-  const onHitPointerMove = (e: React.PointerEvent) => {
-    if (dragRef.current) dragRef.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const endDrag = () => {
-    dragRef.current = null;
-    releaseUntilRef.current = performance.now() + ACTIVE_AFTER_RELEASE_MS;
-    propsRef.current.setForceInteractive(false);
-  };
-
   const onHitPointerUp = (isBird: boolean) => (e: React.PointerEvent) => {
-    if (!dragRef.current) return;
-    endDrag();
     const down = downRef.current;
     downRef.current = null;
-    if (isBird && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) {
+    if (!down) return;
+    if (isBird && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) {
       // Chirp sound inside the real click gesture; the state machine picks up
       // the CHIRP animation on the next tick via clickedRef.
       clickedRef.current = true;
@@ -636,7 +625,6 @@ export default function BirdCompanion(props: BirdCompanionProps) {
   };
 
   const onLostPointerCapture = () => {
-    if (dragRef.current) endDrag();
     downRef.current = null;
   };
 
@@ -795,7 +783,6 @@ export default function BirdCompanion(props: BirdCompanionProps) {
           transform: birdHitTransform(seatNow, spec),
         }}
         onPointerDown={onHitPointerDown}
-        onPointerMove={onHitPointerMove}
         onPointerUp={onHitPointerUp(true)}
         onLostPointerCapture={onLostPointerCapture}
         onContextMenu={onHitContextMenu}
@@ -814,11 +801,10 @@ export default function BirdCompanion(props: BirdCompanionProps) {
             transform: seatHitTransform(seatNow, spec),
           }}
           onPointerDown={onHitPointerDown}
-          onPointerMove={onHitPointerMove}
           onPointerUp={onHitPointerUp(false)}
           onLostPointerCapture={onLostPointerCapture}
           onContextMenu={onHitContextMenu}
-          title="Drag the swing"
+          title="Right-click to change"
         />
       )}
 

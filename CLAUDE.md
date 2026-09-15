@@ -45,16 +45,19 @@ that is click-through except near the charm. Tray menu + Shift+Alt+K toggle.
     position, overridden by per-model/per-VARIANT `boneHints` from the offline pipeline
     — Meshy re-rigs each color variant so bone names differ between variants!) and
     driven procedurally via RigPose: head-only cursor tracking, wing flap, tail wag,
-    ear wiggle. Models with baked clips (mia/riko humanoids) run an AnimationMixer:
-    first clip loops as idle, `clips` URLs hold one-shot reactions (chirp/flutter)
-    retargeted by bone name; bone offsets premultiply ON TOP of the mixer output.
+    ear wiggle. Models with baked clips run an AnimationMixer (path kept but DORMANT: the
+    mia/riko humanoids that used it were retired in 1.1 as buggy; a saved mia/riko
+    selection falls back to bluebird in companionStore): first clip loops as idle, `clips`
+    URLs hold one-shot reactions retargeted by bone name; bone offsets premultiply ON TOP.
     Rigged asset pipeline: scripts/analyze-rig.mjs reports bones/positions/animations
     (NOTE: its normalized positions are degenerate on meshopt-quantized outputs —
     classify roles from the RAW export, verify counts on the output). The whole fleet
-    (bluebird + 13 rigged families, 20 models + 3 clip files) lives in
-    public/companions/; raw exports in "Rigged models/" are gitignored.
+    (bluebird + 11 rigged families, 19 models) lives in public/companions/; raw exports
+    in "Rigged models/" are gitignored.
   - `BirdCompanion.tsx` — bird-mode owner: fixed-timestep physics accumulator, render tiers,
-    sleep/wake gates, hit-point sends, drag/click/context-menu surfaces, glyph fallback.
+    sleep/wake gates, hit-point sends, click/context-menu surfaces, glyph fallback. Companions
+    do NOT drag since 1.1 (pull-and-release stretched the cords and read as rubbery): a press
+    is a click; the swing moves via the menu. `dragRef` stays null (code path kept).
   - `BirdGlyph.tsx` — flat-cute SVG bird: picker thumbnail, GLB-loading placeholder, and
     permanent fallback when WebGL/GLB fail. Must never import three.
 - `src/reminders/` — desk-time reminders (water / move / eye rest / custom), added 2026-09-14:
@@ -210,6 +213,24 @@ short-video launch (GIF-ability is the growth loop).
 
 ### Phase 3 — Steam
 Steamworks setup ($100 Steam Direct), Windows + Mac builds, store page assets.
+
+## Website
+
+Source: `site/` (own Vite build, `vite.site.config.ts`, `base: "./"`, `publicDir: site/public`)
+→ output committed in `docs/` for GitHub Pages (`main:/docs`, https://surez0000.github.io/danglings/).
+Build: `npx vite build -c vite.site.config.ts`. The hero is the REAL renderer: `site/main.ts`
+imports the app's `birdScene.ts`, `useSwing.ts`, `birdBehavior.ts` and `types.ts` (browser
+stand-in for BirdCompanion — cursor from pointermove, no Tauri) and hangs the tabby kitten
+(`site/public/companions/kitten-tabby.glb`, a copy) from the top edge; the still portrait is the
+poster/fallback. Companion cards use real renders in `site/public/portraits/*.png`, produced
+by `site/portrait.html?model=<file>&save=1[&zoom=1.4]` opened through the APP dev server
+(`http://localhost:1420/site/portrait.html…`, which serves every GLB); `?save=1` POSTs the PNG to
+the dev-only `/__portrait` sink plugin in `vite.config.ts`. Re-render when a model changes.
+Static download links point at the v1.0.0 assets; a progressive fetch of the GitHub "latest
+release" API rewrites version/size/links (and enables the Windows button once a `-setup.exe`
+asset exists). The reminders section shows the menu and bubble at real proportions built from
+App.css values. `docs/index.html` is generated — edit `site/index.html`. The build EMPTIES docs/, so nothing
+hand-written may live there; long-form design notes go in `design/` (bird-companion-design.md).
 
 ## Release checklist (auto-update depends on it)
 
